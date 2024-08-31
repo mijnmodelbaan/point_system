@@ -26,11 +26,21 @@
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
 
+#define baseAddressServos1  0x40   //  Base address of the SERVOS part
+#define baseAddressJuicer1  0x20   //  Base address of the JUICER part
+#define baseAddressSignal1  0x21   //  Base address of the SIGNAL part
+#define baseAddressSwitch1  0x24   //  Base address of the SWITCH part
+#define baseAddressSwitch2  0x26   //  Base address of the SWITCH part
+
+
 #include <Arduino.h>   /*  Needed for C++ conversion of INOfile.  */
 
 #include <avr/wdt.h>   /*  Needed for automatic reset functions.  */
 
 #include <avr/io.h>    /*  AVR device-specific  IO  definitions.  */
+
+#include <Wire.h>      /*  The file for the TWI (I2C) interface.  */
+
 
 #include <NmraDcc.h>   /*  Needed for computing the DCC signals.  */
 
@@ -45,11 +55,19 @@ DCC_MSG  Packet ;
 uint8_t thisDecoderdirection = DCC_DIR_FWD;
 uint8_t prevDecoderdirection = DCC_DIR_REV;
 
-#define baseAddressServos1  0x40   //  Base address of the SERVOS part
-#define baseAddressJuicer1  0x20   //  Base address of the JUICER part
-#define baseAddressSignal1  0x21   //  Base address of the SIGNAL part
-#define baseAddressSwitch1  0x24   //  Base address of the SWITCH part
-#define baseAddressSwitch2  0x26   //  Base address of the SWITCH part
+
+#include <Adafruit_PWMServoDriver.h>   /*  Needed for driving the servos */
+
+Adafruit_PWMServoDriver servos = Adafruit_PWMServoDriver(baseAddressServos1);
+
+const int SERVOMIN =  125;   // min pulse value for full left servo throw (zero degrees)
+const int SERVOMAX =  625;   // max pulse value for full right servo throw (180 degrees)
+const int SERVOOFF = 4096;   // pulse value that turns the servo pin off (wear and tear)
+
+int servoPos = 90;
+int servoLft = 90;
+int servoRgt = 90;
+bool thrown  = false; // turnout is in normal position
 
 
 #pragma GCC diagnostic pop
@@ -93,53 +111,170 @@ volatile unsigned long currentMillis; /*  used for the timekeeping  */
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+struct CVPair
+{
+   uint16_t    CV;
+   uint8_t  Value;
+};
 
 
+CVPair FactoryDefaultCVs [] =
+{
+   /*  this is the primary short decoder address  */
+   { CV_MULTIFUNCTION_PRIMARY_ADDRESS,      (( This_Decoder_Address >> 0 ) & 0x7F ) +   0 },
 
-#include <Wire.h>
-#include <Adafruit_PWMServoDriver.h>
+   /*  these two CVs define the Long DCC Address  */
+   { CV_MULTIFUNCTION_EXTENDED_ADDRESS_MSB, (( This_Decoder_Address >> 8 ) & 0x7F ) + 192 },
+   { CV_MULTIFUNCTION_EXTENDED_ADDRESS_LSB, (( This_Decoder_Address >> 0 ) & 0xFF ) +   0 },
+
+   /* ONLY uncomment 1 CV_29_CONFIG line below as approprate -      DEFAULT IS SHORT ADDRESS  */
+// { CV_29_CONFIG,                0},                        // Short Address 14     Speed Steps
+   { CV_29_CONFIG, CV29_F0_LOCATION},                        // Short Address 28/128 Speed Steps
+// { CV_29_CONFIG, CV29_EXT_ADDRESSING | CV29_F0_LOCATION},  // Long  Address 28/128 Speed Steps
+
+   { NMRADCC_MASTER_RESET_CV,     0},
+
+   {  40,   1},   /*  0 = disable ALL, 1 = enable ALL ( >> at start up or reset)  F0  */
+   {  41, 255},
+   {  42, 255},
+   {  43, 155},
+   {  44,   1},   /*  dimmingfactor multiplier  */
+   {  45,  10},   /*  blinking  ON  multiplier  */
+   {  46,  10},   /*  blinking OFF  multiplier  */
+   {  47,  10},   /*  fade up time  multiplier  */
+   {  48,  10},   /*  fade down     multiplier  */
+   {  49,   0},   /*    */
+
+/*   0  disabled
+     1  normal on/off
+     2  blinking
+     4  fading 
+     8  forward 
+    16 backward
+    */
+
+   {  50,   5},  /*  0 = disabled - 1+ = enabled >> NEO   F1  */
+   {  51, 255},  /*  color value  red  channel  */
+   {  52, 255},  /*  color value green channel  */
+   {  53, 155},  /*  color value blue  channel  */
+   {  54, 127},  /*  dimming factor of channel  */
+   {  55,   0},  /*  blinking  ON time setting  */
+   {  56,   0},  /*  blinking OFF time setting  */
+   {  57,  40},  /*  fade-up   time    setting  */
+   {  58,  60},  /*  fade-down time    setting  */
+   {  59,   0},  /*    */
 
 
-// =====================================================================
+   { 251,   0},  /*  NMRADCC_SIMPLE_RESET_CV  */
+   { 252,   0},  /*  NMRADCC_MASTER_RESET_CV  */
+};
 
-// servo limits min 110, max 665 
-const int SERVOMIN = 125;   // min pulse value for full left servo throw (zero degrees)
-const int SERVOMAX = 625;   // max pulse value for full right servo throw (180 degrees)
-const int SERVOOFF = 4096;  // pulse value that turns the servo pin off (wear and tear)
+uint8_t FactoryDefaultCVIndex = sizeof( FactoryDefaultCVs ) / sizeof( CVPair );
+void notifyCVResetFactoryDefault()
+{
+      // Make FactoryDefaultCVIndex non-zero and equal to num CV's to be reset.
+      // Flag to the loop() function a reset to FactoryDefaults has to be done.
+        FactoryDefaultCVIndex = sizeof( FactoryDefaultCVs ) / sizeof( CVPair );
+};
 
 
-Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(baseAddressServos1);
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int servoPos = 90;
-int servoLft = 90;
-int servoRgt = 90;
-bool thrown  = false; // turnout is in normal position
 
 void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(9600);
 
-  pwm.begin();
 
-  pwm.setPWMFreq(60);
-  pwm.setPWM(0, 0, setServoAngle(90));   //set servo to center (90 degrees)
 
+
+#if defined(_DEBUG_) || defined(TESTRUN)
+
+  Serial.begin(115200);
+
+  while (!Serial)
+  {
+    ; // wait for Serial port to connect. Needed for native USB port.
+  }
+
+  Serial.flush();   // Wait for all the rubbish to finish displaying.
+
+  while (Serial.available() > 0)
+  {
+    Serial.read(); // Clear the input buffer to get 'real' inputdata.
+  }
+
+  _PL(F( "-------------------------------------" ));
+
+#endif
+
+
+
+  servos.begin();
+
+  servos.setPWMFreq(60);
+  servos.setPWM( 0, 0, setServoAngle(90) );   //set servo to center (90 degrees)
+
+
+
+
+#if defined(_DECODER_LOADED_)
+
+  if ( Dcc.getCV( NMRADCC_MASTER_RESET_CV ) == NMRADCC_MASTER_RESET_CV ) 
+  {
+
+#endif
+
+    _PL(F( "wait for the copy process to finish.." ));
+
+    FactoryDefaultCVIndex =  sizeof( FactoryDefaultCVs ) / sizeof( CVPair );
+
+    for ( int i = 0; i < FactoryDefaultCVIndex; ++i )
+    {
+      Dcc.setCV( FactoryDefaultCVs[ i ].CV, FactoryDefaultCVs[ i ].Value );
+    }
+
+#if defined(_DECODER_LOADED_)
+
+  }
+
+#endif
+
+
+  //  Call the DCC 'pin' and 'init' functions to enable the DCC Receivermode
+  Dcc.pin( digitalPinToInterrupt( FunctionPinDcc ), FunctionPinDcc, false );
+  Dcc.init( MAN_ID_DIY, 201, FLAGS_MY_ADDRESS_ONLY, 0 );      delay( 1000 );
+  //c.initAccessoryDecoder( MAN_ID_DIY,  201, FLAGS_MY_ADDRESS_ONLY,    0 );
+
+  Dcc.setCV( NMRADCC_SIMPLE_RESET_CV, 0 );  /*  Reset the just_a_reset CV */
+
+
+  displayText(); /* Shows the standard text if applicable */
+
+
+  interrupts();  /* Ready to rumble....*/
 }
 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 void loop() {
-  // put your main code here, to run repeatedly:
+
+
+
   char inChar = (char)Serial.read();
 	 
  if (inChar == 'w') {  //center the servo
     servoPos = 90;
-    pwm.setPWM(0, 0, setServoAngle(servoPos));
+    servos.setPWM(0, 0, setServoAngle(servoPos));
     Serial.println("Set servo center ...");
  }
  
   if (inChar == 'q') {  //adjust servo left 5 degrees at a time
     servoPos = servoPos + 5;
 	  if (servoPos > 180) {servoPos = 180;} // prevent going beyond 180
-    pwm.setPWM(0, 0, setServoAngle(servoPos));
+    servos.setPWM(0, 0, setServoAngle(servoPos));
     Serial.println("New servo left ...");
 	  servoLft = servoPos;
  }
@@ -147,17 +282,17 @@ void loop() {
  if (inChar == 'e') { //adjust servo right 5 degrees at a time
     servoPos = servoPos - 5;
     if (servoPos < 0) {servoPos = 0;} // prevent overdriving servo right
-    pwm.setPWM(0, 0, setServoAngle(servoPos));
+    servos.setPWM(0, 0, setServoAngle(servoPos));
     Serial.println("New servo right ...");
 	  servoRgt = servoPos;
  }
  
  if (inChar == 't') {  //throw the turnout the other way from where it is
     if (thrown) {
-		pwm.setPWM(0, 0, setServoAngle(servoRgt));
+		servos.setPWM(0, 0, setServoAngle(servoRgt));
     Serial.println("Throw right ... ");
 	  } else {
-		pwm.setPWM(0, 0, setServoAngle(servoLft));
+		servos.setPWM(0, 0, setServoAngle(servoLft));
     Serial.println("Throw left ... ");
 	  }
 	thrown = !thrown; // flip the turnout direction
