@@ -120,53 +120,53 @@ struct CVPair
 
 CVPair FactoryDefaultCVs [] =
 {
-   /*  this is the primary short decoder address  */
-   { CV_MULTIFUNCTION_PRIMARY_ADDRESS,      (( This_Decoder_Address >> 0 ) & 0x7F ) +   0 },
+  /*  this is the primary short decoder address  */
+  { CV_MULTIFUNCTION_PRIMARY_ADDRESS,      (( This_Decoder_Address >> 0 ) & 0x7F ) +   0 },
 
-   /*  these two CVs define the Long DCC Address  */
-   { CV_MULTIFUNCTION_EXTENDED_ADDRESS_MSB, (( This_Decoder_Address >> 8 ) & 0x7F ) + 192 },
-   { CV_MULTIFUNCTION_EXTENDED_ADDRESS_LSB, (( This_Decoder_Address >> 0 ) & 0xFF ) +   0 },
+  /*  these two CVs define the Long DCC Address  */
+  { CV_MULTIFUNCTION_EXTENDED_ADDRESS_MSB, (( This_Decoder_Address >> 8 ) & 0x7F ) + 192 },
+  { CV_MULTIFUNCTION_EXTENDED_ADDRESS_LSB, (( This_Decoder_Address >> 0 ) & 0xFF ) +   0 },
 
-   /* ONLY uncomment 1 CV_29_CONFIG line below as approprate -      DEFAULT IS SHORT ADDRESS  */
+  /* ONLY uncomment 1 CV_29_CONFIG line below as approprate -      DEFAULT IS SHORT ADDRESS  */
 // { CV_29_CONFIG,                0},                        // Short Address 14     Speed Steps
    { CV_29_CONFIG, CV29_F0_LOCATION},                        // Short Address 28/128 Speed Steps
 // { CV_29_CONFIG, CV29_EXT_ADDRESSING | CV29_F0_LOCATION},  // Long  Address 28/128 Speed Steps
 
-   { NMRADCC_MASTER_RESET_CV,     0},
+  { NMRADCC_MASTER_RESET_CV,     0},
 
-   {  40,   1},   /*  0 = disable ALL, 1 = enable ALL ( >> at start up or reset)  F0  */
-   {  41, 255},
-   {  42, 255},
-   {  43, 155},
-   {  44,   1},   /*  dimmingfactor multiplier  */
-   {  45,  10},   /*  blinking  ON  multiplier  */
-   {  46,  10},   /*  blinking OFF  multiplier  */
-   {  47,  10},   /*  fade up time  multiplier  */
-   {  48,  10},   /*  fade down     multiplier  */
-   {  49,   0},   /*    */
+  {  40,   0},   /*  0 = disable ALL, 1 = enable ALL ( >> at start up or reset)  F0  */
+  {  41, 255},
+  {  42, 255},
+  {  43, 155},
+  {  44,   1},   /*  dimmingfactor multiplier  */
+  {  45,  10},   /*  blinking  ON  multiplier  */
+  {  46,  10},   /*  blinking OFF  multiplier  */
+  {  47,  10},   /*  fade up time  multiplier  */
+  {  48,  10},   /*  fade down     multiplier  */
+  {  49,   0},   /*    */
 
 /*   0  disabled
-     1  normal on/off
-     2  blinking
-     4  fading 
-     8  forward 
-    16 backward
-    */
+    1  normal on/off
+    2  blinking
+    4  fading 
+    8  forward 
+  16 backward
+  */
 
-   {  50,   5},  /*  0 = disabled - 1+ = enabled >> NEO   F1  */
-   {  51, 255},  /*  color value  red  channel  */
-   {  52, 255},  /*  color value green channel  */
-   {  53, 155},  /*  color value blue  channel  */
-   {  54, 127},  /*  dimming factor of channel  */
-   {  55,   0},  /*  blinking  ON time setting  */
-   {  56,   0},  /*  blinking OFF time setting  */
-   {  57,  40},  /*  fade-up   time    setting  */
-   {  58,  60},  /*  fade-down time    setting  */
-   {  59,   0},  /*    */
+  {  50,   5},  /*  0 = disabled - 1+ = enabled >> NEO   F1  */
+  {  51, 255},  /*  color value  red  channel  */
+  {  52, 255},  /*  color value green channel  */
+  {  53, 155},  /*  color value blue  channel  */
+  {  54, 127},  /*  dimming factor of channel  */
+  {  55,   0},  /*  blinking  ON time setting  */
+  {  56,   0},  /*  blinking OFF time setting  */
+  {  57,  40},  /*  fade-up   time    setting  */
+  {  58,  60},  /*  fade-down time    setting  */
+  {  59,   0},  /*    */
 
 
-   { 251,   0},  /*  NMRADCC_SIMPLE_RESET_CV  */
-   { 252,   0},  /*  NMRADCC_MASTER_RESET_CV  */
+  { 251,   0},  /*  NMRADCC_SIMPLE_RESET_CV  */
+  { 252,   0},  /*  NMRADCC_MASTER_RESET_CV  */
 };
 
 uint8_t FactoryDefaultCVIndex = sizeof( FactoryDefaultCVs ) / sizeof( CVPair );
