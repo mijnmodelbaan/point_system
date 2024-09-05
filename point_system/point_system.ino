@@ -1,5 +1,10 @@
 
 
+//  https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library/tree/master
+//  https://github.com/adafruit/Adafruit-MCP23017-Arduino-Library
+//  https://github.com/adafruit/Adafruit_PCF8574
+
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -53,8 +58,8 @@ DCC_MSG  Packet ;
 #define NMRADCC_MASTER_RESET_CV 252
 #define FunctionPinDcc            2  /* Inputpin DCCsignal */
 
-uint8_t thisDecoderdirection = DCC_DIR_FWD;
-uint8_t prevDecoderdirection = DCC_DIR_REV;
+// uint8_t thisDecoderdirection = DCC_DIR_FWD;
+// uint8_t prevDecoderdirection = DCC_DIR_REV;
 
 
 /* --------------------------------------------------------------------- */
@@ -62,28 +67,43 @@ uint8_t prevDecoderdirection = DCC_DIR_REV;
 
 Adafruit_PWMServoDriver servos = Adafruit_PWMServoDriver( baseAddressServos1 );
 
-const int SERVOMIN =  125;   // min pulse value for full left servo throw (zero degrees)
-const int SERVOMAX =  625;   // max pulse value for full right servo throw (180 degrees)
-const int SERVOOFF = 4096;   // pulse value that turns the servo pin off (wear and tear)
+#define  SERVOMIN   150   // min pulse value for full left servo throw (zero degrees)
+#define  SERVOMAX   600   // max pulse value for full right servo throw (180 degrees)
+#define  SERVOOFF  4096   // pulse value that turns the servo pin off (wear and tear)
+#define  USEC_MIN   600   // This is the rounded 'minimum' microsecond length based on the minimum pulse of 150
+#define  USEC_MAX  2400   // This is the rounded 'maximum' microsecond length based on the maximum pulse of 600
+#define  SERVOFRQ    60   // Digital servos run at ~60Hz updates, analog servos at ~50Hz
 
-int servoPos = 90;
-int servoLft = 90;
-int servoRgt = 90;
-bool thrown  = false; // turnout is in normal position
+/* WATCH IT: pins are numbered from 0 to 15 (so NOT from 1 to 16)  */
 
-
-/* -------------------------------------------------------------- */
-#include <MCP23017.h>     /* needed by JUICER and SIGNAL driving  */
-
-MCP23017 juicer = MCP23017( baseAddressJuicer1 );
-MCP23017 signal = MCP23017( baseAddressSignal1 );
+// int servoPos = 90;
+// int servoLft = 90;
+// int servoRgt = 90;
+// bool thrown  = false; // turnout is in normal position
 
 
 /* -------------------------------------------------------------- */
-#include <pcf8574.h>  /* used by both SWITCH drivers  */
+#include <Adafruit_MCP23X17.h> /* used by JUICER and SIGNAL driving  */
 
-PCF8574 ex1( baseAddressSwitch1 );
-PCF8574 ex2( baseAddressSwitch2 );
+Adafruit_MCP23X17 juicer;
+Adafruit_MCP23X17 signal;
+
+/* WATCH IT: pins are numbered from 0 to 15 (so NOT from 1 to 16)  */
+
+
+/* -------------------------------------------------------------- */
+#include <Adafruit_PCF8574.h>  /* used by both SWITCH drivers  */
+
+Adafruit_PCF8574  inputa;
+Adafruit_PCF8574  inputb;
+
+/* WATCH IT: pins are numbered from 0 to 7 (so NOT from 1 to 8)  */
+
+
+/*  TODO:  check if this works  */
+#define ARDUINO_IRQ1 23  // make sure this pin is possible to make IRQ input   AD0 - inputa IRQ pin
+#define ARDUINO_IRQ2 24  // make sure this pin is possible to make IRQ input   AD1 - inputb IRQ pin
+
 
 
 #pragma GCC diagnostic pop
@@ -94,10 +114,10 @@ PCF8574 ex2( baseAddressSwitch2 );
 /* printing of debug and test options */
 
 #if defined( _DEBUG_ ) || defined(TESTRUN)
-  #define _PP( a ) Serial.print(     a );
-  #define _PL( a ) Serial.println(   a );
-  #define _2P(a,b) Serial.print(  a, b );
-  #define _2L(a,b) Serial.println(a, b );
+  #define _PP( a ) Serial.print(      a );
+  #define _PL( a ) Serial.println(    a );
+  #define _2P(a,b) Serial.print(   a, b );
+  #define _2L(a,b) Serial.println( a, b );
 #else
   #define _PP(  a)
   #define _PL(  a)
@@ -150,28 +170,43 @@ CVPair FactoryDefaultCVs [] =
 
   { NMRADCC_MASTER_RESET_CV,     0},
 
-  {  40,   0},   /*  0 = disable ALL, 1 = enable ALL ( >> at start up or reset)  F0  */
-  {  41, 255},
-  {  42, 255},
-  {  43, 155},
-  {  44,   1},   /*  dimmingfactor multiplier  */
-  {  45,  10},   /*  blinking  ON  multiplier  */
-  {  46,  10},   /*  blinking OFF  multiplier  */
-  {  47,  10},   /*  fade up time  multiplier  */
-  {  48,  10},   /*  fade down     multiplier  */
-  {  49,   0},   /*    */
+  {  40,   5},  /*  angle Lft for all servos   */
+  {  41,   5},  /*  angle Rgt for all servos   */
+  {  49,   0},   /*                            */
 
 
-  {  50,   5},  /*  0 = disabled - 1+ = enabled >> NEO   F1  */
-  {  51, 255},  /*  color value  red  channel  */
-  {  52, 255},  /*  color value green channel  */
-  {  53, 155},  /*  color value blue  channel  */
-  {  54, 127},  /*  dimming factor of channel  */
-  {  55,   0},  /*  blinking  ON time setting  */
-  {  56,   0},  /*  blinking OFF time setting  */
-  {  57,  40},  /*  fade-up   time    setting  */
-  {  58,  60},  /*  fade-down time    setting  */
-  {  59,   0},  /*    */
+                /*  SERVO  1                   */
+  {  50,  90},  /*  angle Lft for this servo   */
+  {  51,  90},  /*  angle Rgt for this servo   */
+  {  52,   0},  /*  0 SERVOS standard Lft      */
+  {  53,   0},  /*  0 JUICER standard Off      */
+  {  54,   0},  /*  0 SIGNAL standard Off      */
+  {  55,  10},  /*  0 SWITCH is Output         */
+
+                /*  SERVO  2                   */
+  {  60,  90},  /*  angle Lft for this servo   */
+  {  61,  90},  /*  angle Rgt for this servo   */
+  {  62,   0},  /*  0 SERVOS standard Lft      */
+  {  63,   0},  /*  0 JUICER standard Off      */
+  {  64,   0},  /*  0 SIGNAL standard Off      */
+  {  65,  10},  /*  0 SWITCH is Output         */
+
+
+                /*  SERVO 15                   */
+  { 190,  90},  /*  angle Lft for this servo   */
+  { 191,  90},  /*  angle Rgt for this servo   */
+  { 192,   0},  /*  0 SERVOS standard Lft      */
+  { 193,   0},  /*  0 JUICER standard Off      */
+  { 194,   0},  /*  0 SIGNAL standard Off      */
+  { 195,  10},  /*  0 SWITCH is Output         */
+
+                /*  SERVO 16                   */
+  { 200,  90},  /*  angle Lft for this servo   */
+  { 201,  90},  /*  angle Rgt for this servo   */
+  { 202,   0},  /*  0 SERVOS standard Lft      */
+  { 203,   0},  /*  0 JUICER standard Off      */
+  { 204,   0},  /*  0 SIGNAL standard Off      */
+  { 205,  10},  /*  0 SWITCH is Output         */
 
 
   { 250,   0},  /*  MASTER SWITCH OVER-RULE    */
@@ -196,6 +231,7 @@ void    notifyCVResetFactoryDefault()
 
 void setup() {
 
+  Wire.begin();   /*  start the I2C / TWI library - mandatory!  */
 
 
 /*  check if starting the Serial Interface is needed and do so if yes  */
@@ -220,55 +256,75 @@ void setup() {
 #endif
 
 
-/*  TODO: ==========================================  */
-  servos.begin();
+/* ===========================================================
+  here the existence of several parts of the project is tested
+  if you don't have a part in your system, delete that code */
 
-  servos.setPWMFreq(60);
-  servos.setPWM( 0, 0, setServoAngle(90) );   //set servo to center (90 degrees)
+  if ( !servos.begin( ) )
+  {
+    _PL( "Couldn't find SERVOS - check and reset" );
+    while ( 1 );
+  }
+
+  if ( !juicer.begin_I2C( baseAddressJuicer1 ) )
+  {
+    _PL( "Couldn't find JUICER - check and reset" );
+    while ( 1 );
+  }
+
+  if ( !signal.begin_I2C( baseAddressSignal1 ) )
+  {
+    _PL( "Couldn't find SIGNAL - check and reset" );
+    while ( 1 );
+  }
+
+  if ( !inputa.begin( baseAddressSwitch1 ) )
+  { 
+    _PL( "Couldn't find SWITCH1 - check and reset" ); 
+    while ( 1 );
+  }
+
+  if ( !inputb.begin( baseAddressSwitch2 ) )
+  { 
+    _PL( "Couldn't find SWITCH2 - check and reset" ); 
+    while ( 1 ); 
+  }
+
+/* ======================================
+   previously we checked if parts existed
+   now we're going to initiale them    */
+
+  servos.setPWMFreq( SERVOFRQ );
+
+  for ( uint8_t p = 0; p < 16; ++p)
+  {
+    juicer.pinMode( p, OUTPUT );
+    signal.pinMode( p, OUTPUT );
+  }
+
+  for ( uint8_t p = 0; p <  8; ++p)
+  {
+    inputa.pinMode( p,  INPUT );
+    inputb.pinMode( p,  INPUT );
+  }
 
 
-/**  example
- * On every loop, the state of the port B is copied to port A.
- *
- * Use active low inputs on port B. Internal pullups are enabled by default by the library so there is no need for external resistors.
- * Place LEDS on port A for instance. 
- * When pressing a button, the corresponding led is shut down.
- * 
- * You can also uncomment one line to invert the input (when pressing a button the corresponding led is lit)
- */
-  juicer.init();
-  juicer.portMode(MCP23017Port::A, 0);          //Port A as output
-  juicer.portMode(MCP23017Port::B, 0b11111111); //Port B as input
-
-  juicer.writeRegister(MCP23017Register::GPIO_A, 0x00);  //Reset port A 
-  juicer.writeRegister(MCP23017Register::GPIO_B, 0x00);  //Reset port B
-
-  // GPIO_B reflects the same logic as the input pins state
-  juicer.writeRegister(MCP23017Register::IPOL_B, 0x00);
-  // Uncomment this line to invert inputs (press a button to lit a led)
-  //juicer.writeRegister(MCP23017Register::IPOL_B, 0xFF);
+/*  TODO:  check this part - interrupts on Arduino */
+  // set up the interrupt pin on IRQ signal toggle
+  pinMode( ARDUINO_IRQ1, INPUT_PULLUP );
+  pinMode( ARDUINO_IRQ2, INPUT_PULLUP );
+  attachInterrupt(digitalPinToInterrupt( ARDUINO_IRQ1 ), button_detect, CHANGE );
+  attachInterrupt(digitalPinToInterrupt( ARDUINO_IRQ1 ), button_detect, CHANGE );
 
 
-  signal.init();
-  signal.portMode(MCP23017Port::A, 0);          //Port A as output
-  signal.portMode(MCP23017Port::B, 0b11111111); //Port B as input
+/* =============================================
+  if you want to really speed Wire-stuff up
+  you can go into 'fast 400khz I2C' mode,
+  but some i2c devices dont like this so if
+  you're sharing the bus, watch out for this! */
+  Wire.setClock(400000);
 
-  signal.writeRegister(MCP23017Register::GPIO_A, 0x00);  //Reset port A 
-  signal.writeRegister(MCP23017Register::GPIO_B, 0x00);  //Reset port B
-
-  // GPIO_B reflects the same logic as the input pins state
-  signal.writeRegister(MCP23017Register::IPOL_B, 0x00);
-  // Uncomment this line to invert inputs (press a button to lit a led)
-  //signal.writeRegister(MCP23017Register::IPOL_B, 0xFF);
-
-
-
-// Example blink diode at P1
-// LED diode between GND and P1
-
-	pinMode(ex1, 1, OUTPUT);
-	pinMode(ex2, 1, OUTPUT);
-
+/*  TODO:  make setClock selectable via a CV ???   */
 
 
 
@@ -286,7 +342,7 @@ void setup() {
 
     for ( int i = 0; i < FactoryDefaultCVIndex; ++i )
     {
-      Dcc.setCV( FactoryDefaultCVs[ i ].CV, FactoryDefaultCVs[ i ].Value );
+      Dcc.setCV( FactoryDefaultCVs[ i ].CV,  FactoryDefaultCVs[ i ].Value );
     }
 
 #if defined(_DECODER_LOADED_)
@@ -304,6 +360,8 @@ void setup() {
   Dcc.setCV( NMRADCC_SIMPLE_RESET_CV, 0 );  /*  Reset the just_a_reset CV */
 
 
+
+
   displayText( true, false ); /* Shows the standard text if allowed */
 
 
@@ -314,58 +372,63 @@ void setup() {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// You can use this function if you'd like to set the pulse length in seconds
+// e.g. setServoPulse(0, 0.001) is a ~1 millisecond pulse width. It's not precise!
+void setServoPulse(uint8_t n, double pulse) {
+  double pulselength;
+  
+  pulselength = 1000000;   // 1,000,000 us per second
+  pulselength /= SERVOFRQ;   // Digital servos run at ~60 Hz updates
+  Serial.print(pulselength); Serial.println(" us per period"); 
+  pulselength /= 4096;  // 12 bits of resolution
+  Serial.print(pulselength); Serial.println(" us per bit"); 
+  pulse *= 1000000;  // convert input seconds to us
+  pulse /= pulselength;
+  Serial.println(pulse);
+  servos.setPWM(n, 0, pulse);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 void loop() {
-
-
-  uint8_t currentB;
-
-  currentB = juicer.readPort(MCP23017Port::B);
-  juicer.writePort(MCP23017Port::A, currentB);
-
-  currentB = signal.readPort(MCP23017Port::B);
-  signal.writePort(MCP23017Port::A, currentB);
-
-
-
-	digitalToggle(ex1, 1);
-	digitalToggle(ex2, 1);
 
 
 
   char inChar = (char)Serial.read();
 	 
  if (inChar == 'w') {  //center the servo
-    servoPos = 90;
-    servos.setPWM(0, 0, setServoAngle(servoPos));
-    Serial.println("Set servo center ...");
+    // servoPos = 90;
+    // servos.setPWM(0, 0, setServoAngle(servoPos));
+    // Serial.println("Set servo center ...");
  }
  
   if (inChar == 'q') {  //adjust servo left 5 degrees at a time
-    servoPos = servoPos + 5;
-	  if (servoPos > 180) {servoPos = 180;} // prevent going beyond 180
-    servos.setPWM(0, 0, setServoAngle(servoPos));
-    Serial.println("New servo left ...");
-	  servoLft = servoPos;
+    // servoPos = servoPos + 5;
+	  // if (servoPos > 180) {servoPos = 180;} // prevent going beyond 180
+    // servos.setPWM(0, 0, setServoAngle(servoPos));
+    // Serial.println("New servo left ...");
+	  // servoLft = servoPos;
  }
 
  if (inChar == 'e') { //adjust servo right 5 degrees at a time
-    servoPos = servoPos - 5;
-    if (servoPos < 0) {servoPos = 0;} // prevent overdriving servo right
-    servos.setPWM(0, 0, setServoAngle(servoPos));
-    Serial.println("New servo right ...");
-	  servoRgt = servoPos;
+    // servoPos = servoPos - 5;
+    // if (servoPos < 0) {servoPos = 0;} // prevent overdriving servo right
+    // servos.setPWM(0, 0, setServoAngle(servoPos));
+    // Serial.println("New servo right ...");
+	  // servoRgt = servoPos;
  }
  
  if (inChar == 't') {  //throw the turnout the other way from where it is
-    if (thrown) {
-		servos.setPWM(0, 0, setServoAngle(servoRgt));
-    Serial.println("Throw right ... ");
-	  } else {
-		servos.setPWM(0, 0, setServoAngle(servoLft));
-    Serial.println("Throw left ... ");
-	  }
-	thrown = !thrown; // flip the turnout direction
+    // if (thrown) {
+		// servos.setPWM(0, 0, setServoAngle(servoRgt));
+    // Serial.println("Throw right ... ");
+	  // } else {
+		// servos.setPWM(0, 0, setServoAngle(servoLft));
+    // Serial.println("Throw left ... ");
+	  // }
+	// thrown = !thrown; // flip the turnout direction
  }
  
 
@@ -375,12 +438,29 @@ void loop() {
  * setServoAngle(int ang)
  * gets angle in degrees and returns matching pulse value
  */
-int setServoAngle(int ang) {
-   int pulse = map(ang, 0, 180, SERVOMIN, SERVOMAX); 
-	 Serial.print("...Angle: "); Serial.print(ang); 
-	 Serial.print(" / Pulse: "); Serial.println(pulse);
+int setServoAngle( int ang ) {
+   int pulse = map( ang, 0, 180, SERVOMIN, SERVOMAX ); 
+	 Serial.print("...Angle: "); Serial.print( ang ); 
+	 Serial.print(" / Pulse: "); Serial.println( pulse );
   return pulse;
 }
+
+
+
+// We use a flag to make sure we don't enter the interrupt more than once
+volatile bool in_irq = false;
+
+// called when the button is pressed!
+void button_detect(void) {
+  if (in_irq) return; // we are already handling an irq so don't collide!
+  
+  in_irq = true;
+  interrupts(); // Arduino UNO seems to require that we turn on interrupts for I2C to work!
+  // bool val = pcf.digitalRead(PCF_BUTTON);
+  // pcf.digitalWrite(PCF_LED, val);
+  in_irq = false;
+}
+
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -417,14 +497,16 @@ next menu:
   c = center the default servo
   x = adjust servo  left x degrees at a time
   v = adjust servo right x degrees at a time
+  p = invert servos setting for this switch
   j = invert juicer setting for this switch
   s = invert signal setting for this switch
+  i = invert switch setting for this switch
   t = throw the switch (servo, juicer, signal)
   w = write the settings in corresponding CVs --> go back to first menu
   y = don't save setting, just go back to first menu
 
 ********************************************************************************** */
-void displayText( bool first = true, bool next = false )
+void displayText( bool first, bool next )
 {
 
 /*  check if we need to display this text  */
@@ -438,7 +520,7 @@ void displayText( bool first = true, bool next = false )
     _PL(F("FD  clear everything: Factory Default"          ));
     _PL(F("DD  prints CV values: to your monitor"          ));
     _PL("");
-    _PL(F("DS  set default switch number (1-16): DS x#"    ));
+    _PL(F("DS  set default item number ( 1-16 ): DS x#"    ));
     _PL("");
     _PL(F("RD  reads a configuration variable: RD xx#"     ));
     _PL(F("WD  write a configuration variable: WD xx# x#"  ));
@@ -456,8 +538,10 @@ void displayText( bool first = true, bool next = false )
     _PL(F("c = center the default servo"                   ));
     _PL(F("v = adjust servo right x degrees at a time"     ));
     _PL("");
-    _PL(F("j = invert juicer setting for this switch"      ));
-    _PL(F("s = invert signal setting for this switch"      ));
+    _PL(F("p = invert servos setting for this number"      ));
+    _PL(F("j = invert juicer setting for this number"      ));
+    _PL(F("s = invert signal setting for this number"      ));
+    _PL(F("i = invert switch setting for this number"      ));
     _PL("");
     _PL(F("t = throw the switch (servo, juicer, signal)"   ));
     _PL(F("w = write the settings  in corresponding CVs"   ));
@@ -570,7 +654,7 @@ void parseCom( char *com )
       {
         _PL("");
 
-        displayText(); // Shows the standard explanation text
+        displayText( true, false ); // Shows the standard explanation text
 
         break;
       }
