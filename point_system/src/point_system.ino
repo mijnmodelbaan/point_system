@@ -198,6 +198,14 @@ CVPair FactoryDefaultCVs [] =
   {  74,   0},  /*  0 SIGNAL standard Off      */
   {  75,  10},  /*  0 SWITCH is Output         */
 
+                /*  SERVO  4                   */
+  {  80,  90},  /*  angle Lft for this servo   */
+  {  81,  90},  /*  angle Rgt for this servo   */
+  {  82,   0},  /*  0 SERVOS standard Lft      */
+  {  83,   0},  /*  0 JUICER standard Off      */
+  {  84,   0},  /*  0 SIGNAL standard Off      */
+  {  85,  10},  /*  0 SWITCH is Output         */
+
 
 
                 /*  SERVO 13                   */
