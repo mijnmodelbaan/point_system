@@ -1,0 +1,5 @@
+[wokwi]
+version = 1
+firmware = '.pio/build/POINT_SYSTEM/firmware.hex'
+elf = '.pio/build/POINT_SYSTEM/firmware.elf'
+gdbServerPort = 3333

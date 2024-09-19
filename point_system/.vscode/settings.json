@@ -1,0 +1,7 @@
+{
+   "vscode-serial-monitor.customBaudRates": [
+      115200
+   ],
+   "vscode-serial-monitor.dataBits": 8,
+   "vscode-serial-monitor.parity": "even"
+}

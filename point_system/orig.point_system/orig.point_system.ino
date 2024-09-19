@@ -4,6 +4,8 @@
 //  https://github.com/adafruit/Adafruit-MCP23017-Arduino-Library
 //  https://github.com/adafruit/Adafruit_PCF8574
 
+//  https://github.com/MicroBahner/MobaTools/tree/master
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -296,13 +298,13 @@ void setup() {
 
   servos.setPWMFreq( SERVOFRQ );
 
-  for ( uint8_t p = 0; p < 16; ++p)
+  for ( uint8_t p = 0; p < 16; ++p)   /*  initialise all 16 as OUTPUT  */
   {
     juicer.pinMode( p, OUTPUT );
     signal.pinMode( p, OUTPUT );
   }
 
-  for ( uint8_t p = 0; p <  8; ++p)
+  for ( uint8_t p = 0; p <  8; ++p)   /*  initialise all 2*8 as INPUT  */
   {
     inputa.pinMode( p,  INPUT );
     inputb.pinMode( p,  INPUT );
@@ -505,14 +507,17 @@ next menu:
   w = write the settings in corresponding CVs --> go back to first menu
   y = don't save setting, just go back to first menu
 
-********************************************************************************** */
+*************************************************************************************
+  We use a flag to make sure we don't enter the wrong function upon reveiving      */
+volatile bool next_menu = false;
+
 void displayText( bool first, bool next )
 {
 
 /*  check if we need to display this text  */
 #if defined(_DEBUG_) || defined(TESTRUN)
 
-  if( first = true )
+  if( first == true )
   {
     _PL("");   // An extra empty line for better understanding
     _PL(F("**  put in one of the following commands: "     ));
@@ -529,7 +534,7 @@ void displayText( bool first, bool next )
     _PL("");   // An extra empty line for better understanding
   }
 
-  if( next  = true )
+  if( next  == true )
   {
     _PL("");   // An extra empty line for better understanding
     _PL(F("**  put in one of the following commands: "     ));
@@ -549,8 +554,6 @@ void displayText( bool first, bool next )
     _PL(F("**  any other key discards settings  **"        ));
     _PL("");   // An extra empty line for better understanding
   }
-
-
 
 #endif
 
