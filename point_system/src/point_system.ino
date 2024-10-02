@@ -1,8 +1,8 @@
 
 
 //  https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library/tree/master
-//  https://github.com/adafruit/Adafruit-MCP23017-Arduino-Library
-//  https://github.com/adafruit/Adafruit_PCF8574
+//  https://github.com/adafruit/Adafruit-MCP23017-Arduino-Library/tree/master
+//  https://github.com/adafruit/Adafruit_PCF8574/tree/main
 
 //  https://github.com/MicroBahner/MobaTools/tree/master
 //  https://arduino.stackexchange.com/questions/91149/how-to-determine-the-minimum-time-for-a-servo-to-reach-its-destination
@@ -23,16 +23,18 @@
 // ******** REMOVE THE "//" IN THE FOLLOWING LINE TO SEND DEBUGGING INFO TO THE SERIAL OUTPUT
 #define _DEBUG_
 //
+// ******** UNCOMMENT THE FOLLOWING LINE TO -not- CHECK AND INITIALISE THE TWO WIRE INTERFACE
+#define NO_TWI_CHECK
+//
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/* don't print warnings of unused functions from here */
+/* don't print warnings of diagnostic functions from here */
 #pragma GCC diagnostic push
 
-#pragma GCC diagnostic error "-Wsign-compare"
-#pragma GCC diagnostic error "-Wunused-function"
-#pragma GCC diagnostic error "-Wunused-variable"
-// #pragma GCC diagnostic error "-Wsomething"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-variable"
 
 
 #define baseAddressServos1  0x40   /*  Base address of the SERVOS part  */
@@ -76,9 +78,9 @@ Adafruit_PWMServoDriver servos = Adafruit_PWMServoDriver( baseAddressServos1 );
 #define  SERVOMIN   150   // min pulse value for full left servo throw (zero degrees)
 #define  SERVOMAX   600   // max pulse value for full right servo throw (180 degrees)
 #define  SERVOOFF  4096   // pulse value that turns the servo pin off (wear and tear)
-#define  USEC_MIN   600   // This is the rounded 'minimum' microsecond length based on the minimum pulse of 150
-#define  USEC_MAX  2400   // This is the rounded 'maximum' microsecond length based on the maximum pulse of 600
-#define  SERVOFRQ    60   // Digital servos run at ~60Hz updates, analog servos at ~50Hz
+#define  USEC_MIN   600   // rounded 'minimum' u-sec length based on min pulse of 150
+#define  USEC_MAX  2400   // rounded 'maximum' u-sec length based on max pulse of 600
+#define  SERVOFRQ    50   // digital servos run at ~60Hz updates, analog servos ~50Hz
 
 /* WATCH IT: pins are numbered from 0 to 15 (so NOT from 1 to 16)  */
 
@@ -101,23 +103,29 @@ Adafruit_PCF8574  inputb;
 /* WATCH IT: pins are numbered from 0 to 7 (so NOT from 1 to 8)  */
 
 
+/* -----------------------------------------------------------------
+   here we declare our own 'header' file ( optional variables )   */
+
+void displayText( bool first, bool next, bool clear = true, byte shift = 3 );
+
+
 #pragma GCC diagnostic pop
-/* don't print warnings of unused functions till here */
+/* don't print warnings of diagnostic functions till here */
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 /* printing of debug and test options */
 
-#if defined( _DEBUG_ ) || defined(TESTRUN)
-  #define _PP( a ) Serial.print(      a );
-  #define _PL( a ) Serial.println(    a );
-  #define _2P(a,b) Serial.print(   a, b );
-  #define _2L(a,b) Serial.println( a, b );
+#if defined( _DEBUG_ ) || defined( TESTRUN )
+  #define _PP( a   ) Serial.print(      a );
+  #define _PL( a   ) Serial.println(    a );
+  #define _2P( a,b ) Serial.print(   a, b );
+  #define _2L( a,b ) Serial.println( a, b );
 #else
-  #define _PP(  a)
-  #define _PL(  a)
-  #define _2P(a,b)
-  #define _2L(a,b)
+  #define _PP( a   )
+  #define _PL( a   )
+  #define _2P( a,b )
+  #define _2L( a,b )
 #endif
 
 
@@ -126,12 +134,13 @@ Adafruit_PCF8574  inputb;
 // char commandString[ 32] ;    /*  Max length for a buffer.  */
 // bool foundBom   = false ;    /*  Found begin of messages.  */
 
-char    sprintfBuffer[ 64 ] ;    /*  Max length for a buffer.  */
+char    sprintfBuffer[ 96 ] ;    /*  Max length for a buffer.  */
 bool    foundEom    = false ;    /*  Found  end  of messages.  */
 String  commandString =  "" ;    /*  String to hold incoming   */
-// uint8_t cvCheck = 0;
+
 
 volatile unsigned long currentMillis; /*  used for the timekeeping  */
+volatile unsigned long elapsedMillis; /*  used for the timekeeping  */
 
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
@@ -206,7 +215,69 @@ CVPair FactoryDefaultCVs [] =
   {  84,   0},  /*  0 SIGNAL standard Off      */
   {  85,  10},  /*  0 SWITCH is Output         */
 
+                /*  SERVO  5                   */
+  {  90,  90},  /*  angle Lft for this servo   */
+  {  91,  90},  /*  angle Rgt for this servo   */
+  {  92,   0},  /*  0 SERVOS standard Lft      */
+  {  93,   0},  /*  0 JUICER standard Off      */
+  {  94,   0},  /*  0 SIGNAL standard Off      */
+  {  95,  10},  /*  0 SWITCH is Output         */
 
+                /*  SERVO  6                   */
+  { 100,  90},  /*  angle Lft for this servo   */
+  { 101,  90},  /*  angle Rgt for this servo   */
+  { 102,   0},  /*  0 SERVOS standard Lft      */
+  { 103,   0},  /*  0 JUICER standard Off      */
+  { 104,   0},  /*  0 SIGNAL standard Off      */
+  { 105,  10},  /*  0 SWITCH is Output         */
+
+                /*  SERVO  7                   */
+  { 110,  90},  /*  angle Lft for this servo   */
+  { 111,  90},  /*  angle Rgt for this servo   */
+  { 112,   0},  /*  0 SERVOS standard Lft      */
+  { 113,   0},  /*  0 JUICER standard Off      */
+  { 114,   0},  /*  0 SIGNAL standard Off      */
+  { 115,  10},  /*  0 SWITCH is Output         */
+
+                /*  SERVO  8                   */
+  { 120,  90},  /*  angle Lft for this servo   */
+  { 121,  90},  /*  angle Rgt for this servo   */
+  { 122,   0},  /*  0 SERVOS standard Lft      */
+  { 123,   0},  /*  0 JUICER standard Off      */
+  { 124,   0},  /*  0 SIGNAL standard Off      */
+  { 125,  10},  /*  0 SWITCH is Output         */
+
+                /*  SERVO  9                   */
+  { 130,  90},  /*  angle Lft for this servo   */
+  { 131,  90},  /*  angle Rgt for this servo   */
+  { 132,   0},  /*  0 SERVOS standard Lft      */
+  { 133,   0},  /*  0 JUICER standard Off      */
+  { 134,   0},  /*  0 SIGNAL standard Off      */
+  { 135,  10},  /*  0 SWITCH is Output         */
+
+                /*  SERVO 10                   */
+  { 140,  90},  /*  angle Lft for this servo   */
+  { 141,  90},  /*  angle Rgt for this servo   */
+  { 142,   0},  /*  0 SERVOS standard Lft      */
+  { 143,   0},  /*  0 JUICER standard Off      */
+  { 144,   0},  /*  0 SIGNAL standard Off      */
+  { 145,  10},  /*  0 SWITCH is Output         */
+
+                /*  SERVO 11                   */
+  { 150,  90},  /*  angle Lft for this servo   */
+  { 151,  90},  /*  angle Rgt for this servo   */
+  { 152,   0},  /*  0 SERVOS standard Lft      */
+  { 153,   0},  /*  0 JUICER standard Off      */
+  { 154,   0},  /*  0 SIGNAL standard Off      */
+  { 155,  10},  /*  0 SWITCH is Output         */
+
+                /*  SERVO 12                   */
+  { 160,  90},  /*  angle Lft for this servo   */
+  { 161,  90},  /*  angle Rgt for this servo   */
+  { 162,   0},  /*  0 SERVOS standard Lft      */
+  { 163,   0},  /*  0 JUICER standard Off      */
+  { 164,   0},  /*  0 SIGNAL standard Off      */
+  { 165,  10},  /*  0 SWITCH is Output         */
 
                 /*  SERVO 13                   */
   { 170,  90},  /*  angle Lft for this servo   */
@@ -302,10 +373,13 @@ struct QUEUE
 };
 QUEUE volatile *turnout_queue = new QUEUE[ 16 + 1 ];   /*  16 turnouts max [15:0] + 1 dummy  */
 
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
+
 volatile byte currentTurnout = 16;  /*  default turnout updating commands  */
 volatile byte positionUpdate =  2;  /*  turnout position update (x, c, v)  */
+volatile long ninety_degrees = ( ( SERVOMAX + SERVOMIN ) / 2 ) * ( ( 1000000 / SERVOFRQ ) / 4096 );
 
-/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 /* //////////////////////////////////////////////////////////////////////////////////////////////////////
   this is the place where everything is set up  */
@@ -324,7 +398,13 @@ void setup()
   PCMSK1 = PCMSK1 | 0b00001111;  /*  A0 = PCINT8, A1 = PCINT9, A2 = PCINT10, A3 = PCINT11 */
   PCIFR  = PCIFR  | 0b00000010;  /*  Clear interrupt for all interrupts from port A[7:0]  */
 
-ADCSRA = 0;  /*  disable analog conversions  */
+
+  /*  TODO: check these regs  carefully with the sequences  */
+  ADCSRA = ADCSRA & 0b01010000;  /*  disable possible analog conversions and interrupts   */
+  ADCSRB = ADCSRB & 0b00000000;  /*  disable possible analog conversions and interrupts   */
+
+  ACSR   = ACSR   & 0b11110111;  /*  Bit 3 – ACIE: Analog Comparator Interrupt Enable     */
+  ACSR   = ACSR   | 0b10000000;  /*  Bit 7 – ACD: Analog Comparator Disable               */
 
 
   interrupts();  /* sei() can also be used   */
@@ -366,11 +446,12 @@ ADCSRA = 0;  /*  disable analog conversions  */
   Serial.setTimeout( 1000 );  /*  maximum wait time after Cr/Lf /n  */
   commandString.reserve( 32 ); /* reserve 32 bytes for inputString  */
 
-  _PL(F( "-------------------------------------" ));
+  displayText( false, false, false, 25 ); /*  clear the screen  */
 
 #endif
 
 
+#if !defined( NO_TWI_CHECK )
 /* ===========================================================
   here the existence of several parts of the project is tested
   if you don't have a part in your system, delete that code */
@@ -378,31 +459,31 @@ ADCSRA = 0;  /*  disable analog conversions  */
   if ( !servos.begin( ) )
   {
     _PL( "Couldn't find SERVOS  - check and reset" );
-    // while ( 1 );
+    while ( 1 ) { softwareReset(  WDTO_15MS  ); };
   }
 
-  if ( !juicer.begin_I2C( baseAddressJuicer1 ) )
+  if ( !juicer.begin_I2C( baseAddressJuicer1, &Wire ) )
   {
     _PL( "Couldn't find JUICER  - check and reset" );
-    // while ( 1 );
+    while ( 1 );
   }
 
-  if ( !signal.begin_I2C( baseAddressSignal1 ) )
+  if ( !signal.begin_I2C( baseAddressSignal1, &Wire ) )
   {
     _PL( "Couldn't find SIGNAL  - check and reset" );
-    // while ( 1 );
+    while ( 1 );
   }
 
-  if ( !inputa.begin( baseAddressSwitch1 ) )
+  if ( !inputa.begin( baseAddressSwitch1, &Wire ) )
   { 
     _PL( "Couldn't find SWITCH1 - check and reset" ); 
-    // while ( 1 );
+    while ( 1 );
   }
 
-  if ( !inputb.begin( baseAddressSwitch2 ) )
+  if ( !inputb.begin( baseAddressSwitch2, &Wire ) )
   { 
     _PL( "Couldn't find SWITCH2 - check and reset" ); 
-    // while ( 1 ); 
+    while ( 1 ); 
   }
 
 /* ======================================
@@ -423,6 +504,8 @@ ADCSRA = 0;  /*  disable analog conversions  */
     inputb.pinMode( p,  INPUT );
   }
 
+/* ======================================================== */
+#endif  /*  NO_TWI_CHECK  */
 
 
 /*  check for setting the CVs to Factory Default during start and do so if yes  */
@@ -430,7 +513,7 @@ ADCSRA = 0;  /*  disable analog conversions  */
 
   if ( Dcc.getCV( NMRADCC_MASTER_RESET_CV ) == NMRADCC_MASTER_RESET_CV ) {
 
-#endif
+#endif   /* DECODER_LOADED */
 
     _PL(F( "wait for the copy process to finish.." ));
 
@@ -445,7 +528,7 @@ ADCSRA = 0;  /*  disable analog conversions  */
 
   }
 
-#endif
+#endif   /* DECODER_LOADED */
 
 
   //  Call the DCC 'pin' and 'init' functions to enable the DCC Receivermode
@@ -460,29 +543,6 @@ ADCSRA = 0;  /*  disable analog conversions  */
 
 
   interrupts();  /* Ready to rumble....*/
-};
-
-
-/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
-
-/* //////////////////////////////////////////////////////////////////////////////////////////////////////
-   */
-
-/*  TODO:  check this out - maybe usable for JUICER setting during half-time SERVOS  */
-// You can use this function if you'd like to set the pulse length in seconds
-// e.g. setServoPulse(0, 0.001) is a ~1 millisecond pulse width. It's not precise!
-void setServoPulse(uint8_t n, double pulse) {
-  double pulselength;
-  
-  pulselength = 1000000;   // 1,000,000 us per second
-  pulselength /= SERVOFRQ;   // Digital servos run at ~60 Hz updates  1.000.000 / 50 = 20.000
-  Serial.print(pulselength); Serial.println(" us per period"); 
-  pulselength /= 4096;  // 12 bits of resolution   20.000 / 4096 = 4,882
-  Serial.print(pulselength); Serial.println(" us per bit"); 
-  pulse *= 1000000;  // convert input seconds to us   4,882 * 1.000.000 = 4.882.812,5
-  pulse /= pulselength;  //   4.882.812 / 20.000 = 244
-  Serial.println(pulse);
-  servos.setPWM(n, 0, pulse);
 };
 
 
@@ -524,13 +584,18 @@ volatile byte myKeyPcold =  &HFF;  /*  hold  old value keypress when interrupted
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
+
+volatile uint8_t  inputaPrevious;                              // previous reading of buttons
+volatile uint8_t  inputaPrevTog;                               // toggle memory
+volatile uint8_t  inputaActSta;                                // buttons state
+
+
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
 void loop() {
 
   Dcc.process();  /*  Call this process for a Dcc connection  */
-
 
   currentMillis = millis();  /*  lets keep track of the time  */
 
@@ -597,18 +662,23 @@ void loop() {
     myEvent_A3 = false;
   }
 
-#endif
+#endif   /* USE_INTERRUPTS */
 
+
+runEvery( 1000 ) { _PL ( " first command" ); }
+
+runEvery( 2000 ) { _PL ( "second command" ); }
 
   if ( Serial.available() > 0 )  /*  Serial Input needs message-handling  */
   {
     commandString = Serial.readString();
 
-    if ( commandString.length() > 0 )
-    {
-      foundEom = true;
-    }
+    // if ( commandString.length() > 0 )
+    // {
+    //   foundEom = true;
+    // }
 
+    foundEom = ( ( commandString.length() > 0 ) ? true : false );
   } 
 
   if ( foundEom )  /*  Serial Input needs message-handling  */
@@ -629,6 +699,14 @@ int setServoAngle( int ang ) {
    int pulse = map( ang, 0, 180, SERVOMIN, SERVOMAX ); 
 	 Serial.print("...Angle: "); Serial.print( ang ); 
 	 Serial.print(" / Pulse: "); Serial.println( pulse );
+
+  double pulselength = 1000000 / SERVOFRQ;  /*  1,000,000 us per second / 60 = 16.667 - digital servos run at ~60 Hz updates  */
+  _PP ( pulselength ); _PP ( " us per period = " ); 
+  pulselength /= 4096;  // 12 bits of resolution   16.667 / 4096 = 4,069
+  _PP ( pulselength ); _PP ( " us per bit - " ); 
+  _PP ( "default center: "); _PL ( ninety_degrees );
+
+
   return pulse;
 };
 
@@ -658,73 +736,69 @@ void softwareReset( uint8_t preScaler )
 /* **********************************************************************************
 ***                  menu system for setting and dumping values                   ***
 *************************************************************************************
-
-first menu:
-  FD         factory defaults all settings --> writes to CVs
-  DD         lists all data on serial monitor
-  DS x#      default switch (1 to 16) -->  display next menu
-  DR xx#     read  data from CV address xx# (0 to 255)
-  DW xx# x#  write data x# to CV address xx# (0 to 255)
-
-next menu:
-  c = center the default servo
-  x = adjust servo  left x degrees at a time
-  v = adjust servo right x degrees at a time
-  p = invert servos setting for this switch
-  j = invert juicer setting for this switch
-  s = invert signal setting for this switch
-  i = invert switch setting for this switch
-  d = display all settings for this turnout
-  t = throw the switch (servo, juicer, signal)
-  w = write the settings in corresponding CVs --> ask for confirmation
-  ? = don't save setting, just go back to first menu
-
-   there could be alse x+ and x-, v+ and v-
-
-*************************************************************************************
   We use a flag to make sure we don't enter the wrong function upon reveiving      */
-volatile bool next_menu = false;
+volatile bool next_menu = false, do_escape = true ;
 
-void displayText( bool first, bool next )
+void displayText( bool first, bool next, bool clear, byte shift )
 {
-
-  if( first == true )
+  if ( clear ==  true)   /*  clear the screen and display a header text  */
   {
-    _PL(" ");  // An extra empty line for better understanding
-    _PL(F("**  put in one of the following commands: "     ));
-    _PL(F("----------------------------------------------" ));
-    _PL(F("FD  clear everything: Factory Default"          ));
-    _PL(F("DD  prints CV values: to your monitor"          ));
-    _PL(" "                                                 );
-    _PL(F("DS  set default item number ( 1-16 ): DS x#"    ));
-    _PL(" "                                                 );
-    _PL(F("DR  reads a configuration variable: DR xx#"     ));
-    _PL(F("DW  write a configuration variable: DW xx# x#"  ));
-    _PL(F("----------------------------------------------" ));
-    _PL(F("**        confirm with  [Enter]  key        **" ));
-    _PL(" ");  // An extra empty line for better understanding
+    if ( do_escape )
+    {
+    _PP(F( "\e[2J\e[1;1H" )); /*  send escape sequences out  */
+    }
+
+    _PL(F( " ***  AtMega328 controling your turnouts  *** " ));
   }
 
-  if(  next  == true )
+  if ( shift > 0 )
   {
-    _PL("");   // An extra empty line for better understanding
-    _PL(F("**  put in one of the following commands: "     ));
-    _PL(F("----------------------------------------------" ));
-    _PL(F("x = adjust servo  left x degrees at a time"     ));
-    _PL(F("c = center the default servo (set with DS #)"   ));
-    _PL(F("v = adjust servo right x degrees at a time"     ));
-    _PL(" "                                                 );
-    _PL(F("p = invert  SERVOS  setting for this turnout"   ));
-    _PL(F("j = invert  JUICER  setting for this turnout"   ));
-    _PL(F("s = invert  SIGNAL  setting for this turnout"   ));
-    _PL(F("i = invert  SWITCH  setting for this turnout"   ));
-    _PL(" "                                                 );
-    _PL(F("d = display changed setting for this turnout"   ));
-    _PL(F("t = throw the switch (servo, juicer, signal)"   ));
-    _PL(F("w = write the settings  in corresponding CVs"   ));
-    _PL(F("----------------------------------------------" ));
-    _PL(F("**   any other key discards the settings    **" ));
-    _PL("");   // An extra empty line for better understanding
+    byte lines = constrain( shift, 1, 26 );  /*  max 26 empty lines  */
+
+    for ( byte p = 0; p < lines; ++p )
+    {
+      _PL( " ");
+    }
+  }
+
+  if ( first == true )
+  {
+    _PL( " " ); // An extra empty line for better understanding
+    _PL(F( "**   put in one of the following commands   **" ));
+    _PL(F( "----------------------------------------------" ));
+    _PL(F( "FD  clear everything: Factory Default"          ));
+    _PL(F( "DD  prints CV values: to your monitor"          ));
+    _PL(   " "                                               );
+    _PL(F( "DS  set default item number ( 1-16 ): DS x#"    ));
+    _PL(   " "                                               );
+    _PL(F( "DR  reads a configuration variable: DR xx#"     ));
+    _PL(F( "DW  write a configuration variable: DW xx# x#"  ));
+    _PL(F( "----------------------------------------------" ));
+    _PL(F( "**    use the  [Enter]  key if necessary    **" ));
+    _PL(F( "**    do NOT forget the mandatory spaces    **" ));
+    _PL( " " ); // An extra empty line for better understanding
+  }
+
+  if (  next == true )
+  {
+    _PL( " " ); // An extra empty line for better understanding
+    _PL(F( "**   put in one of the following commands   **" ));
+    _PL(F( "----------------------------------------------" ));
+    _PL(F( "x = adjust servo  left x degrees at a time"     ));
+    _PL(F( "c = center the default servo (set with DS #)"   ));
+    _PL(F( "v = adjust servo right x degrees at a time"     ));
+    _PL(   " "                                               );
+    _PL(F( "p = invert  SERVOS  setting for this turnout"   ));
+    _PL(F( "j = invert  JUICER  setting for this turnout"   ));
+    _PL(F( "s = invert  SIGNAL  setting for this turnout"   ));
+    _PL(F( "i = invert  SWITCH  setting for this turnout"   ));
+    _PL(   " "                                               );
+    _PL(F( "d = display changed setting for this turnout"   ));
+    _PL(F( "t = throw the switch (servo, juicer, signal)"   ));
+    _PL(F( "w = write the settings, in corresponding CVs"   ));
+    _PL(F( "----------------------------------------------" ));
+    _PL(F( "**   any other key discards the settings    **" ));
+    _PL( "" );  // An extra empty line for better understanding
   }
 
 };
@@ -746,20 +820,25 @@ void parseCom( String commandString )
   char charOne = '!', charTwo = '!';   /*  first two could be letters  */
   uint16_t intOne = -1, intTwo = -1;   /*  after that come the numbers */
 
-  int deTected = sscanf( commandString.c_str(), "%1c%1c%u%u", &charOne, &charTwo, &intOne, &intTwo );
+  int deTected = sscanf( commandString.c_str(), "%1c%1c %u %u", &charOne, &charTwo, &intOne, &intTwo );
 
+#if defined( _DEBUG_ )
   memset( sprintfBuffer, 0, sizeof sprintfBuffer );
-  sprintf( sprintfBuffer, "charOne: %1c - charTwo: %1c - intOne:  %3u - intTwo:  %3u - deTected:  %3u", charOne, charTwo, intOne, intTwo, deTected );
+  sprintf( sprintfBuffer, "charOne: %1c - charTwo: %1c - intOne: %3u - intTwo: %3u - deTected: %3u", charOne, charTwo, intOne, intTwo, deTected );
   _PL( sprintfBuffer );
+#endif /*  _DEBUG_  */
 
-  if (( next_menu == true ) & ( deTected == 1 ))  /*  single character commands of next menu  */
+  if (( next_menu ) & ( deTected == 1 ))  /*  single character commands of next menu  */
   {
     switch ( charOne )
     {
       case 'x': /*  x = adjust servo  left x degrees at a time  */
       {
         turnout_queue[ 16 ].angleLft += positionUpdate ;
-        if ( turnout_queue[ 16 ].angleLft > 180 ) { turnout_queue[ 16 ].angleLft = 180; }
+
+        turnout_queue[ 16 ].angleLft = constrain( turnout_queue[ 16 ].angleLft, turnout_queue[ 16 ].angleRgt, 180 );
+
+        // if ( turnout_queue[ 16 ].angleLft > 180 ) { turnout_queue[ 16 ].angleLft = 180; }
         servos.setPWM( currentTurnout, 0, setServoAngle( turnout_queue[ 16 ].angleLft ) );
         sprintf( sprintfBuffer, "new servo  left:  %3u ", turnout_queue[ 16 ].angleLft );
         _PL( sprintfBuffer );
@@ -776,7 +855,11 @@ void parseCom( String commandString )
       case 'v': /*  v = adjust servo right x degrees at a time  */
       {
         turnout_queue[ 16 ].angleRgt -= positionUpdate ;
-        if ( turnout_queue[ 16 ].angleRgt < 0 ) { turnout_queue[ 16 ].angleRgt = 0; } /*  prevent overdrive  */
+
+        turnout_queue[ 16 ].angleRgt = constrain( turnout_queue[ 16 ].angleRgt, 0, turnout_queue[ 16 ].angleLft );
+
+        // if ( turnout_queue[ 16 ].angleRgt < 0 ) { turnout_queue[ 16 ].angleRgt = 0; } /*  prevent overdrive  */
+
         servos.setPWM( currentTurnout, 0, setServoAngle( turnout_queue[ 16 ].angleRgt ) );
         sprintf( sprintfBuffer, "new servo right:  %3u ", turnout_queue[ 16 ].angleRgt );
         _PL( sprintfBuffer );
@@ -830,11 +913,98 @@ void parseCom( String commandString )
         break;
       }
       default:  /*  discard all changes  */
+        // next_menu = false;
         break;
     }
   }     /*  end of single character commands  */
 
-  if (( next_menu != true ) & ( deTected == 2 ))  /*  double character commands of first menu  */
+  if (( next_menu ) & ( deTected == 2 ))  /*  double character commands of next menu  */
+  {
+    switch ( charOne )
+    {
+      case 'x': /*  x = adjust servo  left x degrees at a time  */
+      {
+        switch ( charTwo )
+        {
+          case '+': /*  +  */
+          {
+            turnout_queue[ 16 ].angleLft += positionUpdate ;
+
+            turnout_queue[ 16 ].angleLft = constrain( turnout_queue[ 16 ].angleLft, turnout_queue[ 16 ].angleRgt, 180 );
+
+            // if ( turnout_queue[ 16 ].angleLft > 180 ) { turnout_queue[ 16 ].angleLft = 180; }
+            servos.setPWM( currentTurnout, 0, setServoAngle( turnout_queue[ 16 ].angleLft ) );
+            sprintf( sprintfBuffer, "new servo  left:  %3u ", turnout_queue[ 16 ].angleLft );
+            _PL( sprintfBuffer );
+            turnout_queue[ 16 ].currentState = true;  /*  something has changed  */
+
+            break;
+          }
+          case '-': /*  -  */
+          {
+            turnout_queue[ 16 ].angleLft -= positionUpdate ;
+
+            turnout_queue[ 16 ].angleLft = constrain( turnout_queue[ 16 ].angleLft, turnout_queue[ 16 ].angleRgt, 180 );
+
+            // if ( turnout_queue[ 16 ].angleLft > 180 ) { turnout_queue[ 16 ].angleLft = 180; }
+            servos.setPWM( currentTurnout, 0, setServoAngle( turnout_queue[ 16 ].angleLft ) );
+            sprintf( sprintfBuffer, "new servo  left:  %3u ", turnout_queue[ 16 ].angleLft );
+            _PL( sprintfBuffer );
+            turnout_queue[ 16 ].currentState = true;  /*  something has changed  */
+
+            break;
+          }
+          default:  /*  discard all changes  */
+            break;
+        }
+        break;
+      }
+      case 'v': /*  v = adjust servo right x degrees at a time  */
+      {
+        switch ( charTwo )
+        {
+          case '+': /*  FD  clear everything: Factory Default  */
+          {
+            turnout_queue[ 16 ].angleRgt += positionUpdate ;
+
+            turnout_queue[ 16 ].angleRgt = constrain( turnout_queue[ 16 ].angleRgt, 0, turnout_queue[ 16 ].angleLft );
+
+            // if ( turnout_queue[ 16 ].angleRgt < 0 ) { turnout_queue[ 16 ].angleRgt = 0; } /*  prevent overdrive  */
+
+            servos.setPWM( currentTurnout, 0, setServoAngle( turnout_queue[ 16 ].angleRgt ) );
+            sprintf( sprintfBuffer, "new servo right:  %3u ", turnout_queue[ 16 ].angleRgt );
+            _PL( sprintfBuffer );
+            turnout_queue[ 16 ].currentState = true;  /*  something has changed  */
+
+            break;
+          }
+          case '-': /*  FD  clear everything: Factory Default  */
+          {
+            turnout_queue[ 16 ].angleRgt -= positionUpdate ;
+
+            turnout_queue[ 16 ].angleRgt = constrain( turnout_queue[ 16 ].angleRgt, 0, turnout_queue[ 16 ].angleLft );
+
+            // if ( turnout_queue[ 16 ].angleRgt < 0 ) { turnout_queue[ 16 ].angleRgt = 0; } /*  prevent overdrive  */
+
+            servos.setPWM( currentTurnout, 0, setServoAngle( turnout_queue[ 16 ].angleRgt ) );
+            sprintf( sprintfBuffer, "new servo right:  %3u ", turnout_queue[ 16 ].angleRgt );
+            _PL( sprintfBuffer );
+            turnout_queue[ 16 ].currentState = true;  /*  something has changed  */
+
+            break;
+          }
+          default:  /*  discard all changes  */
+            break;
+        }
+        break;
+      }
+      default:  /*  discard all changes  */
+        // next_menu = false;
+        break;
+    }
+  }     /*  end of double character commands  */
+
+  if (( !next_menu ) & ( deTected == 2 ))  /*  double character commands of first menu  */
   {
     switch ( charOne )
     {
@@ -883,7 +1053,7 @@ void parseCom( String commandString )
     }
   }     /*  end of double character commands  */
 
-  if (( next_menu != true ) & ( deTected == 3 ))  /*  triple character commands of first menu  */
+  if (( !next_menu ) & ( deTected == 3 ))  /*  triple character commands of first menu  */
   {
     switch ( charOne )
     {
@@ -893,30 +1063,23 @@ void parseCom( String commandString )
         {
           case 's': /*  DS  set default item number ( 1-16 ): DS x#  */
           {
-            // uint16_t cT;
-
-//           if ( sscanf( com + 3, "%d", &cT ) != 1 ) { return; }  /*  data incorrect  */
-
-//           if ( ( cT & 0b00011111 ) > 16 ) { return; }  /*  data incorrect  */
-
             intOne = constrain( intOne, 1, 16 );  // limits range of sensor values to 1 till 16
-
-
             sprintf( sprintfBuffer, "Default turnout changed to: %d", intOne );
-
-//           currentTurnout = cT;
-
-          // sprintf( sprintfBuffer, "DR  cv:  %3u - value:  %3u ", cv, cvCheck );
             _PL( sprintfBuffer );
 
+            next_menu =  true;
+
+/*  TODO: settings  */
+
+            displayText ( !next_menu, next_menu );
             break;
           }
           case 'r': /*  DR  reads a configuration variable: DR xx#  */
           {
-            intOne = constrain( intOne, 40, 255 );  /*  limits range of CVs from 40 till 255  */
-            uint8_t cvCheck = Dcc.getCV( intOne );
+            intOne = constrain( intOne,  0, 255 );  /*  limits range of CVs from  0 till 255  */
+            uint8_t cvValue = Dcc.getCV( intOne );
 
-            sprintf( sprintfBuffer, "DR  cv:  %3u - value:  %3u ", intOne, cvCheck );
+            sprintf( sprintfBuffer, "DR  cv:  %3u - value:  %3u ", intOne, cvValue );
             _PL( sprintfBuffer );
             break;
           }
@@ -930,7 +1093,7 @@ void parseCom( String commandString )
     }
   }     /*  end of triple character commands  */
 
-  if (( next_menu != true ) & ( deTected == 4 ))  /*  quad character commands of first menu  */
+  if (( !next_menu ) & ( deTected == 4 ))  /*  quadpl character commands of first menu  */
   {
     switch ( charOne )
     {
@@ -941,8 +1104,8 @@ void parseCom( String commandString )
           case 'w': /*  DW  write a configuration variable: DW xx# x#  */
           {
             /*  TODO: do not use constrain on intOne, but check !!!! else values might be written to the wrong CV  */
-            intOne = constrain( intOne, 40, 255 );  /*  limits range of CVs from 40 till 255  */
 
+            intOne = constrain( intOne,  0, 255 );  /*  limits range of CVs from  0 till 255  */
             intTwo = constrain( intTwo,  0, 255 );  /*  limits CVvalue range from 0 till 255  */
 
             uint8_t cvCheck = Dcc.setCV( intOne, intTwo );  /*  write action  */
@@ -961,7 +1124,7 @@ void parseCom( String commandString )
       default:  /*  discard all changes  */
         break;
     }
-  }     /*  end of quad character commands  */
+  }     /*  end of quadpl character commands  */
 
 
   //       // default:    /****  DEFAULT FOR THE SWITCH FUNCTION = NO ACTION  ****/
@@ -1245,27 +1408,41 @@ void exec_function ( int function, int pin, int FuncState )
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-// // You can use this function if you'd like to set the pulse length in seconds
-// // e.g. setServoPulse(0, 0.001) is a ~1 millisecond pulse width. It's not precise!
-// void setServoPulse(uint8_t n, double pulse) {
-//   double pulselength;
+/* //////////////////////////////////////////////////////////////////////////////////////////////////////
+   */
+
+/*  TODO:  check this out - maybe usable for JUICER setting during half-time SERVOS  */
+// You can use this function if you'd like to set the pulse length in seconds
+// e.g. setServoPulse(0, 0.001) is a ~1 millisecond pulse width. It's not precise!
+void setServoPulse(uint8_t n, double pulse) {
+  double pulselength;
   
-//   pulselength = 1000000;   // 1,000,000 us per second
-//   pulselength /= SERVO_FREQ;   // Analog servos run at ~60 Hz updates
-//   Serial.print(pulselength); Serial.println(" us per period"); 
-//   pulselength /= 4096;  // 12 bits of resolution
-//   Serial.print(pulselength); Serial.println(" us per bit"); 
-//   pulse *= 1000000;  // convert input seconds to us
-//   pulse /= pulselength;
-//   Serial.println(pulse);
-//   pwm.setPWM(n, 0, pulse);
-// }
+  pulselength = 1000000;   // 1,000,000 us per second
+  pulselength /= SERVOFRQ;   // Digital servos run at ~60 Hz updates  1.000.000 / 60 = 16.667
+  Serial.print(pulselength); Serial.println(" us per period"); 
+  pulselength /= 4096;  // 12 bits of resolution   16.667 / 4096 = 4,069
+  Serial.print(pulselength); Serial.println(" us per bit"); 
+  pulse *= 1000000;  // convert input seconds to us   4,069 * 1.000.000 = 4.069.010
+  pulse /= pulselength;  //   4.069.010 / 16.667 = 244,135
+  Serial.println(pulse);
+  servos.setPWM(n, 0, pulse);
+};
 
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
+
+/*  example from   https://github.com/luisllamasbinaburo/Arduino-I2CScanner/tree/master  */
+byte scan(byte address)
+{
+	Wire.beginTransmission(address);
+	byte error = Wire.endTransmission();
+	return error;
+}
+
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
