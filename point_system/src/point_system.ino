@@ -349,9 +349,9 @@ void loop() {
   currentMillis = millis();  /*  lets keep track of the time  */
 
 
-runEvery( 2000 ) { _PL ( " first command" ); }
+  runEvery( 25 ) { readButtonsInputa; }
 
-runEvery( 6000 ) { _PL ( "second command" ); }
+  runEvery( 25 ) { readButtonsInputb; }
 
 
 
@@ -367,6 +367,77 @@ runEvery( 6000 ) { _PL ( "second command" ); }
     parseCom( commandString );
   }
 
+};
+
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
+
+volatile uint8_t  inputaPrevious;                              // previous reading of buttons
+volatile uint8_t  inputaPrvState;                              // previous state
+volatile uint8_t  inputaActState;                              // buttons actual State
+volatile uint8_t  inputaAcToggle;                              // buttons actual Toggle
+volatile uint8_t  inputaActualOn;                              // down front
+volatile uint8_t  inputaActualOf;                              //   up front
+
+
+void readButtonsInputa()
+{
+
+  interrupts(); // Arduino UNO seems to require that we turn on interrupts for I2C to work!
+
+
+  // uint8_t inputaNewInput = ~PINC & B00000111;                  // 0 when pressed, internal pullup on pins A0, A1, A2
+
+
+  uint8_t inputaNewInput = ~inputa.digitalReadByte() & B00000111;    // 0 when pressed
+
+
+// this section reacts immediatley to a new different reading
+
+  inputaActualOn  =  inputaNewInput & ~inputaPrevious;         // calculate PRESSED  transitioning bits
+  inputaActualOf  = ~inputaNewInput &  inputaPrevious;
+
+  inputaAcToggle ^=  inputaActualOn;                           // apply TOGGLE 
+
+  // if (actOn & DELAY_TIMER_BTN) {Serial.print(counter); Serial.println(F(" DELAY pressed ")); }
+  // if (actOn & PROG_SEL_BTN)    {Serial.print(counter); Serial.println(F(" PROG pressed ")); }
+  // if (actOn & START_BTN)       {Serial.print(counter); Serial.println(F(" START pressed ")); }
+  
+  // if (actOff & DELAY_TIMER_BTN){Serial.print(counter); Serial.println(F(" released DELAY")); }
+  // if (actOff & PROG_SEL_BTN)   {Serial.print(counter); Serial.println(F(" released PROG")); }
+  // if (actOff & START_BTN)      {Serial.print(counter); Serial.println(F(" released START")); }
+
+  // digitalWrite(A5, actTog & START_BTN);                // display red led toggle START/STOP 
+
+  // this section below develops the idea of a stable press (same for 2 readings)
+
+  uint8_t staBits = ~( inputaNewInput ^ inputaPrevious );
+
+  // actSta &= ~staBits;                                  // knock out the old stable bit readings
+  // actSta |= newData & staBits;                         // and jam the stable readings in there
+
+  // digitalWrite(A4, actSta & (PROG_SEL_BTN | DELAY_TIMER_BTN));  // one or both, green led ON 
+
+// and could be used with for a fussier actOn / actOff / actTog
+// by basing them on stable state readings
+
+  // unsigned char fussyActOn  = actSta & ~prevSta;
+  // unsigned char fussyActOff = ~actSta & prevSta;
+
+  // if (fussyActOn & DELAY_TIMER_BTN)      {Serial.print(counter); Serial.println(F(" verified fussy DELAY"));}
+  // if (fussyActOff & DELAY_TIMER_BTN)      {Serial.print(counter); Serial.println(F(" released fussy DELAY"));}
+
+
+// always...
+  inputaPrevious = inputaNewInput;                             // bump along the history
+  inputaPrvState = inputaActState;                             // bump along the history
+};
+
+
+void readButtonsInputb()
+{
+  // break;
 };
 
 
