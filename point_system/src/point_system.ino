@@ -3,6 +3,7 @@
 //  https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library/tree/master
 //  https://github.com/adafruit/Adafruit-MCP23017-Arduino-Library
 //  https://github.com/adafruit/Adafruit_PCF8574
+//  https://github.com/felias-fogg/FlexWire/tree/main
 
 //  https://github.com/MicroBahner/MobaTools/tree/master
 //  https://arduino.stackexchange.com/questions/91149/how-to-determine-the-minimum-time-for-a-servo-to-reach-its-destination
@@ -30,11 +31,12 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /* don't print warnings of diagnostic functions from here */
-#pragma GCC diagnostic push
+# pragma GCC diagnostic push
 
-#pragma GCC diagnostic ignored "-Wsign-compare"
-#pragma GCC diagnostic ignored "-Wunused-function"
-#pragma GCC diagnostic ignored "-Wunused-variable"
+# pragma GCC diagnostic ignored "-Wunknown-pragmas"
+# pragma GCC diagnostic ignored "-Wsign-compare"
+# pragma GCC diagnostic ignored "-Wunused-function"
+# pragma GCC diagnostic ignored "-Wunused-variable"
 
 
 #define baseAddressServos1  0x40   /*  Base address of the SERVOS part  */
@@ -44,14 +46,23 @@
 #define baseAddressSwitch2  0x26   /*  Base address of the SWITCH part  */
 
 
+/* -------------------------------------------------------------------- */
 #include <Arduino.h>         /*  Needed for C++ conversion of INOfile.  */
 
+
+/* -------------------------------------------------------------------- */
 #include <avr/wdt.h>         /*  Needed for automatic reset functions.  */
 
+
+/* -------------------------------------------------------------------- */
 #include <avr/io.h>          /*  AVR device-specific  IO  definitions.  */
 
+
+/* -------------------------------------------------------------------- */
 #include <avr/interrupt.h>   /*  Might be necessary, for ISR handling.  */
 
+
+/* -------------------------------------------------------------------- */
 #include <Wire.h>            /*  The file for the TWI (I2C) interface.  */
 
 
@@ -106,7 +117,7 @@ Adafruit_PCF8574  inputb;
 void displayText( bool first, bool next, bool clear = true, byte shift = 3 );
 
 
-#pragma GCC diagnostic pop
+# pragma GCC diagnostic pop
 /* don't print warnings of diagnostic functions till here */
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -200,13 +211,13 @@ volatile long ninety_degrees = ( ( SERVOMAX + SERVOMIN ) / 2 ) * ( ( 1000000 / S
 
 void setup()
 {
-  noInterrupts(); /*  cli() can also be used  */
+  // noInterrupts(); /*  cli() can also be used  */
 
 
 /* =========================================================================================
   the following lines set the A0 to A3 lines as input (with a pull-up) for the interrupts */
-  DDRC   = DDRC   & 0b00110000;  /*  Set bits A[3-0] as inputs, leave the rest as-is      */
-  PORTC  = PORTC  | 0b11001111;  /*  Switch bits A[3-0] to PULL-UP, leave the rest as-is  */
+  DDRC   = DDRC   & 0b11110000;  /*  Set bits A[3-0] as inputs, leave the rest as-is      */
+  PORTC  = PORTC  | 0b00001111;  /*  Switch bits A[3-0] to PULL-UP, leave the rest as-is  */
 
   PCICR  = PCICR  | 0b00000010;  /*  Set PCIE1, meaning enable the PCINT[14:8] interrupts */
   PCMSK1 = PCMSK1 | 0b00001111;  /*  A0 = PCINT8, A1 = PCINT9, A2 = PCINT10, A3 = PCINT11 */
@@ -221,17 +232,10 @@ void setup()
   // ACSR   = ACSR   | 0b10000000;  /*  Bit 7 – ACD: Analog Comparator Disable               */
 
 
-  interrupts();  /* sei() can also be used   */
+  interrupts(); /*  Arduino UNO seems to require that we turn on interrupts for I2C to work  */
 
-
-  Wire.begin();   /*  start the I2C / TWI library - mandatory!  */
-
-/* =============================================
-  if you want to really speed Wire-stuff up
-  you can go into 'fast 400khz I2C' mode,
-  but some i2c devices dont like this so if
-  you're sharing the bus, watch out for this! */
-  // Wire.setClock(400000);
+  Wire.begin( /* SDA_PIN, SCL_PIN */ );        /*  start the I2C / TWI library - mandatory!  */
+  Wire.setClock( 400000 );       /*  go into 'fast 400khz I2C' mode, but watch out for this  */
 
 /*  TODO:  make setClock selectable via a CV ???   */
 
@@ -258,9 +262,9 @@ void setup()
   }
 
   Serial.setTimeout( 1000 );  /*  maximum wait time after Cr/Lf /n  */
-  commandString.reserve( 32 ); /* reserve 32 bytes for inputString  */
+  commandString.reserve( 64 ); /* reserve 32 bytes for inputString  */
 
-  displayText( false, false, false,  5 );  /*  do clear the screen  */
+  displayText( false, false, false,  3 );  /*  do clear the screen  */
 
 #endif
 
@@ -303,7 +307,7 @@ void setup()
   if ( scan ( baseAddressSwitch1 ) != 0 )
   { 
     _PL( "Couldn't find SWITCH1 - check and reset" ); 
-    // softwareReset( WDTO_4S );  /*  resets every 4s */
+    softwareReset( WDTO_4S );  /*  resets every 4s */
   } else {
     for ( uint8_t p = 0; p <  8; ++p )   /*  initialise all  8 as  INPUT  */
     {
@@ -314,7 +318,7 @@ void setup()
   if ( scan ( baseAddressSwitch2 ) != 0 )
   { 
     _PL( "Couldn't find SWITCH2 - check and reset" );
-    // softwareReset( WDTO_4S );  /*  resets every 4s */
+    softwareReset( WDTO_4S );  /*  resets every 4s */
   } else {
     for ( uint8_t p = 0; p <  8; ++p )   /*  initialise all  8 as  INPUT  */
     {
@@ -326,7 +330,7 @@ void setup()
 #endif  /*  NO_TWI_CHECK  */
 
 
-  displayText( true, false ); /* Shows the standard text if allowed */
+  displayText( false, false,  true,  2 );  /*  do clear the screen  */
 
 
   interrupts();  /* Ready to rumble....*/
@@ -336,9 +340,9 @@ void setup()
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
-volatile uint8_t  inputaPrevious;                              // previous reading of buttons
-volatile uint8_t  inputaPrToggle;                              // toggle memory
-volatile uint8_t  inputaActState;                              // buttons state
+// volatile uint8_t  inputaPrevious;                              // previous reading of buttons
+// volatile uint8_t  inputaPrToggle;                              // toggle memory
+// volatile uint8_t  inputaActState;                              // buttons state
 
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
@@ -349,9 +353,9 @@ void loop() {
   currentMillis = millis();  /*  lets keep track of the time  */
 
 
-  runEvery( 25 ) { readButtonsInputa; }
+  runEvery( 1250 ) { readButtonsInputa(); }
 
-  runEvery( 25 ) { readButtonsInputb; }
+  runEvery( 3800 ) { readButtonsInputb(); }
 
 
 
@@ -373,13 +377,15 @@ void loop() {
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
+/*  inspired by  https://forum.arduino.cc/t/debouncing-buttons-read-with-a-pcf-8575/1038096/14  */
+
+
 volatile uint8_t  inputaPrevious;                              // previous reading of buttons
 volatile uint8_t  inputaPrvState;                              // previous state
 volatile uint8_t  inputaActState;                              // buttons actual State
 volatile uint8_t  inputaAcToggle;                              // buttons actual Toggle
 volatile uint8_t  inputaActualOn;                              // down front
 volatile uint8_t  inputaActualOf;                              //   up front
-
 
 void readButtonsInputa()
 {
@@ -390,8 +396,9 @@ void readButtonsInputa()
   // uint8_t inputaNewInput = ~PINC & B00000111;                  // 0 when pressed, internal pullup on pins A0, A1, A2
 
 
-  uint8_t inputaNewInput = ~inputa.digitalReadByte() & B00000111;    // 0 when pressed
+  uint8_t inputaNewInput = ~inputa.digitalReadByte() & 0b11111111;    // 0 when pressed, so invert
 
+_PP ( "inputaNewInput = " ); _2L ( inputaNewInput, BIN );
 
 // this section reacts immediatley to a new different reading
 
@@ -399,6 +406,10 @@ void readButtonsInputa()
   inputaActualOf  = ~inputaNewInput &  inputaPrevious;
 
   inputaAcToggle ^=  inputaActualOn;                           // apply TOGGLE 
+
+_PP ( "inputaActualOn = " ); _2L ( inputaActualOn, BIN );
+_PP ( "inputaActualOf = " ); _2L ( inputaActualOf, BIN );
+_PP ( "inputaAcToggle = " ); _2L ( inputaAcToggle, BIN );
 
   // if (actOn & DELAY_TIMER_BTN) {Serial.print(counter); Serial.println(F(" DELAY pressed ")); }
   // if (actOn & PROG_SEL_BTN)    {Serial.print(counter); Serial.println(F(" PROG pressed ")); }
@@ -413,6 +424,8 @@ void readButtonsInputa()
   // this section below develops the idea of a stable press (same for 2 readings)
 
   uint8_t staBits = ~( inputaNewInput ^ inputaPrevious );
+
+_PP ( "staBits = " ); _2L ( staBits, BIN );
 
   // actSta &= ~staBits;                                  // knock out the old stable bit readings
   // actSta |= newData & staBits;                         // and jam the stable readings in there
@@ -432,12 +445,16 @@ void readButtonsInputa()
 // always...
   inputaPrevious = inputaNewInput;                             // bump along the history
   inputaPrvState = inputaActState;                             // bump along the history
+
+_PP ( "inputaPrevious = " ); _2L ( inputaPrevious, BIN );
+_PP ( "inputaPrvState = " ); _2L ( inputaPrvState, BIN );
+_PL ( "" );
 };
 
 
 void readButtonsInputb()
 {
-  // break;
+  while ( 1 );
 };
 
 
@@ -1189,11 +1206,12 @@ void    notifyCVChange( uint16_t CV, uint8_t Value )
 
 /*  example from   https://github.com/luisllamasbinaburo/Arduino-I2CScanner/tree/master  */
 
-byte scan(byte address)
+byte scan( byte address )
 {
-	Wire.beginTransmission(address);
-	byte error = Wire.endTransmission();
-	return error;
+  Wire.beginTransmission( address );
+  byte error = Wire.endTransmission( );
+  delay ( 100 );  /*  wait a little wile - debounce  */
+  return error;
 }
 
 
