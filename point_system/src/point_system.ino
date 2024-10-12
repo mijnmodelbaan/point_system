@@ -124,17 +124,17 @@ void displayText( bool first, bool next, bool clear = true, byte shift = 3 );
 
 /*  printing of debug and test options  */
 
-#if defined( _DEBUG_ ) || defined( TESTRUN )
-  #define _PP( a   ) Serial.print(      a );
-  #define _PL( a   ) Serial.println(    a );
-  #define _2P( a,b ) Serial.print(   a, b );
-  #define _2L( a,b ) Serial.println( a, b );
-#else
-  #define _PP( a   )
-  #define _PL( a   )
-  #define _2P( a,b )
-  #define _2L( a,b )
-#endif
+# if defined( _DEBUG_ ) || defined( TESTRUN )
+  # define _PP( a   ) Serial.print(      a );
+  # define _PL( a   ) Serial.println(    a );
+  # define _2P( a,b ) Serial.print(   a, b );
+  # define _2L( a,b ) Serial.println( a, b );
+# else
+  # define _PP( a   )
+  # define _PL( a   )
+  # define _2P( a,b )
+  # define _2L( a,b )
+# endif
 
 char    sprintfBuffer[ 96 ] ;    /*  Max length for a buffer.  */
 bool    foundEom    = false ;    /*  Found  end  of messages.  */
@@ -146,14 +146,13 @@ volatile unsigned long elapsedMillis; /*  used for the timekeeping  */
 
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
-
-/* //////////////////////////////////////////////////////////////////////////////////////////////////////
 /*  *****  small macro, is used to create timed events  *****  see the example below the macro  *****  */
 
 #define runEvery( n ) for ( static unsigned long lasttime; millis() - lasttime > ( unsigned long )( n ); lasttime = millis() )
 
 /* example: runEvery( time ) { command; }  check if the time (in millis) has passed and if so executes */
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
 
 
 /* //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -189,12 +188,14 @@ set all the turnouts correctly in setup and after receiving a command
 
 struct QUEUE
 {
-  uint8_t   angleLft      =     90 ;  /*  angle to go full  Left  */
-  uint8_t   angleRgt      =     90 ;  /*  angle to go full Right  */
-  bool      moveToCenter  =  false ;  /*  makes a move to Center  */
-  uint8_t   moveFromCntr  =     90 ;  /*  moving to Left / Right  */
-  uint16_t  juicerTime    =   1255 ;  /*  a juicer needs to wait  */
-  bool      currentState  =  false ;  /*  do we need attention ?  */
+  uint16_t  angleLft      = SERVOMIN ;  /*  angle to go full  Left  */
+  uint16_t  angleRgt      = SERVOMAX ;  /*  angle to go full Right  */
+  uint16_t  moveEndState  = SERVOOFF ;  /*  this is end point move  */
+  uint16_t  actualServoP  = SERVOOFF ;  /*  keep track of movement  */
+  uint16_t  juicerTime    =     1255 ;  /*  a juicer needs to wait  */
+  bool      moveToCenter  =    false ;  /*  makes a move to Center  */
+  bool      moveFromCntr  =    false ;  /*  moving to Left / Right  */
+  bool      currentState  =    false ;  /*  do we need attention ?  */
 };
 QUEUE volatile *turnout_queue = new QUEUE[ 16 + 1 ];   /*  16 turnouts max [15:0] + 1 dummy  */
 
@@ -216,12 +217,12 @@ void setup()
 
 /* =========================================================================================
   the following lines set the A0 to A3 lines as input (with a pull-up) for the interrupts */
-  DDRC   = DDRC   & 0b11110000;  /*  Set bits A[3-0] as inputs, leave the rest as-is      */
-  PORTC  = PORTC  | 0b00001111;  /*  Switch bits A[3-0] to PULL-UP, leave the rest as-is  */
+  // DDRC   = DDRC   & 0b11110000;  /*  Set bits A[3-0] as inputs, leave the rest as-is      */
+  // PORTC  = PORTC  | 0b00001111;  /*  Switch bits A[3-0] to PULL-UP, leave the rest as-is  */
 
-  PCICR  = PCICR  | 0b00000010;  /*  Set PCIE1, meaning enable the PCINT[14:8] interrupts */
-  PCMSK1 = PCMSK1 | 0b00001111;  /*  A0 = PCINT8, A1 = PCINT9, A2 = PCINT10, A3 = PCINT11 */
-  PCIFR  = PCIFR  | 0b00000010;  /*  Clear interrupt for all interrupts from port A[7:0]  */
+  // PCICR  = PCICR  | 0b00000010;  /*  Set PCIE1, meaning enable the PCINT[14:8] interrupts */
+  // PCMSK1 = PCMSK1 | 0b00001111;  /*  A0 = PCINT8, A1 = PCINT9, A2 = PCINT10, A3 = PCINT11 */
+  // PCIFR  = PCIFR  | 0b00000010;  /*  Clear interrupt for all interrupts from port A[7:0]  */
 
 
   /*  TODO: check these regs  carefully with the sequences  */
@@ -240,16 +241,13 @@ void setup()
 /*  TODO:  make setClock selectable via a CV ???   */
 
 
-
-
-
 /*  check if starting the Serial Interface is needed and do so if yes  */
 #if defined( _DEBUG_ ) || defined( TESTRUN )
 
   // Serial.begin( 9600, SERIAL_8N1 ); /*  ( 115200, SERIAL_8N1 );  */
   Serial.begin( 115200, SERIAL_8N1 );
 
-  while (!Serial)
+  while (! Serial)
   {
     ; // wait for Serial port to connect. Needed for native USB port.
   }
@@ -261,8 +259,8 @@ void setup()
     Serial.read(); // Clear the input buffer to get 'real' inputdata.
   }
 
-  Serial.setTimeout( 1000 );  /*  maximum wait time after Cr/Lf /n  */
-  commandString.reserve( 64 ); /* reserve 32 bytes for inputString  */
+  Serial.setTimeout( 1000 );  /*  maximum wait time after an input  */
+  commandString.reserve( 64 ); /* reserve 64 bytes for inputString  */
 
   displayText( false, false, false,  3 );  /*  do clear the screen  */
 
@@ -274,55 +272,60 @@ void setup()
   here the existence of several parts of the project is tested
   if you don't have a part in your system, delete that code */
 
-  if ( scan ( baseAddressServos1 ) != 0 )
+  if (! servos.begin( ) )
   {
     _PL( "Couldn't find SERVOS  - check and reset" );
     // softwareReset( WDTO_4S );  /*  resets every 4s */
   } else {
+    _PL( "Found SERVOS  - going to the next steps" ); 
     servos.setPWMFreq( SERVOFRQ );
   }
 
-  if ( scan ( baseAddressJuicer1 ) != 0 )
+  if (! juicer.begin_I2C( baseAddressJuicer1, &Wire ) )
   {
     _PL( "Couldn't find JUICER  - check and reset" );
     // softwareReset( WDTO_4S );  /*  resets every 4s */
   } else {
+    _PL( "Found JUICER  - going to the next steps" ); 
     for ( uint8_t p = 0; p < 16; ++p )   /*  initialise all 16 as OUTPUT  */
     {
       juicer.pinMode( p, OUTPUT );
     }
   }
 
-  if ( scan ( baseAddressSignal1 ) != 0 )
+  if (! signal.begin_I2C( baseAddressSignal1, &Wire ) )
   {
     _PL( "Couldn't find SIGNAL  - check and reset" );
     // softwareReset( WDTO_4S );  /*  resets every 4s */
   } else {
+    _PL( "Found SIGNAL  - going to the next steps" ); 
     for ( uint8_t p = 0; p < 16; ++p )   /*  initialise all 16 as OUTPUT  */
     {
       signal.pinMode( p, OUTPUT );
     }
   }
 
-  if ( scan ( baseAddressSwitch1 ) != 0 )
+  if (! inputa.begin( baseAddressSwitch1, &Wire ) )
   { 
     _PL( "Couldn't find SWITCH1 - check and reset" ); 
     softwareReset( WDTO_4S );  /*  resets every 4s */
   } else {
+    _PL( "Found SWITCH1 - going to the next steps" ); 
     for ( uint8_t p = 0; p <  8; ++p )   /*  initialise all  8 as  INPUT  */
     {
-      inputa.pinMode( p,  INPUT );
+      inputa.pinMode( p,  INPUT_PULLUP ); // INPUT );
     }
   }
 
-  if ( scan ( baseAddressSwitch2 ) != 0 )
+  if (! inputb.begin( baseAddressSwitch2, &Wire ) )
   { 
-    _PL( "Couldn't find SWITCH2 - check and reset" );
+    _PL( "Couldn't find SWITCH2 - check and reset" ); 
     softwareReset( WDTO_4S );  /*  resets every 4s */
   } else {
+    _PL( "Found SWITCH2 - going to the next steps" ); 
     for ( uint8_t p = 0; p <  8; ++p )   /*  initialise all  8 as  INPUT  */
     {
-      inputb.pinMode( p,  INPUT );
+      inputb.pinMode( p,  INPUT_PULLUP ); // INPUT );
     }
   }
 
@@ -330,21 +333,72 @@ void setup()
 #endif  /*  NO_TWI_CHECK  */
 
 
-  displayText( false, false,  true,  2 );  /*  do clear the screen  */
+
+turnout_queue[ 0].angleLft  = 175;
+turnout_queue[ 0].angleRgt  = 475;
+
+turnout_queue[ 1].angleLft  = 275;
+turnout_queue[ 1].angleRgt  = 375;
+
+turnout_queue[ 2].angleLft  = 175;
+turnout_queue[ 2].angleRgt  = 475;
+
+turnout_queue[ 3].angleLft  = 175;
+turnout_queue[ 3].angleRgt  = 475;
+
+turnout_queue[ 4].angleLft  = 175;
+turnout_queue[ 4].angleRgt  = 475;
+
+turnout_queue[ 5].angleLft  = 175;
+turnout_queue[ 5].angleRgt  = 475;
+
+turnout_queue[ 6].angleLft  = 175;
+turnout_queue[ 6].angleRgt  = 475;
+
+turnout_queue[ 7].angleLft  = 175;
+turnout_queue[ 7].angleRgt  = 475;
+
+turnout_queue[ 8].angleLft  = 175;
+turnout_queue[ 8].angleRgt  = 475;
+
+turnout_queue[ 9].angleLft  = 175;
+turnout_queue[ 9].angleRgt  = 475;
+
+turnout_queue[10].angleLft  = 175;
+turnout_queue[10].angleRgt  = 475;
+
+turnout_queue[11].angleLft  = 175;
+turnout_queue[11].angleRgt  = 475;
+
+turnout_queue[12].angleLft  = 175;
+turnout_queue[12].angleRgt  = 475;
+
+turnout_queue[13].angleLft  = 175;
+turnout_queue[13].angleRgt  = 475;
+
+turnout_queue[14].angleLft  = 275;
+turnout_queue[14].angleRgt  = 375;
+
+turnout_queue[15].angleLft  = 175;
+turnout_queue[15].angleRgt  = 475;
 
 
-  interrupts();  /* Ready to rumble....*/
+/*  set all SERVOS, JUICERs and SINALs to the SWITCHes states  */
+readButtonsInputa( );
+readButtonsInputb( );
+
+
+  //  Call the DCC 'pin' and 'init' functions to enable the DCC Receivermode
+  Dcc.pin( digitalPinToInterrupt( FunctionPinDcc ), FunctionPinDcc, false );
+  Dcc.init( MAN_ID_DIY, 201, FLAGS_MY_ADDRESS_ONLY, 0 );      delay( 1000 );
+  //c.initAccessoryDecoder( MAN_ID_DIY,  201, FLAGS_MY_ADDRESS_ONLY,    0 );
+
+  Dcc.setCV( NMRADCC_SIMPLE_RESET_CV, 0 );  /*  Reset the just_a_reset CV */
+
+
+  displayText(  true, false,  true,  2 );   /*  finally clear the screen  */
+
 };
-
-
-/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
-
-
-// volatile uint8_t  inputaPrevious;                              // previous reading of buttons
-// volatile uint8_t  inputaPrToggle;                              // toggle memory
-// volatile uint8_t  inputaActState;                              // buttons state
-
-
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
@@ -353,10 +407,11 @@ void loop() {
   currentMillis = millis();  /*  lets keep track of the time  */
 
 
-  runEvery( 1250 ) { readButtonsInputa(); }
+  runEvery( 25 ) { readButtonsInputa( ); }
 
-  runEvery( 3800 ) { readButtonsInputb(); }
+  runEvery( 25 ) { readButtonsInputb( ); }
 
+  runEvery(  5 ) { setsServosCorrect( ); }
 
 
   if ( Serial.available() > 0 )  /*  Serial Input needs message-handling  */
@@ -372,92 +427,292 @@ void loop() {
   }
 
 };
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
+void setsServosCorrect()
+{
+  if ( scan ( baseAddressServos1 ) == 0 )  /*  test SERVOS  existance  */
+  {
+    for ( uint8_t p = 0; p < 16; ++p )
+    {
+      if ( turnout_queue[ p ].currentState )
+      {
+        _PP( currentMillis );
+        _PP( " - " );
+        _PP( p + 1 );
+        _PP( " - " );
+        _PL( turnout_queue[ p ].actualServoP )
+
+        if ( turnout_queue[ p ].actualServoP  > turnout_queue[ p ].moveEndState )
+        {
+          turnout_queue[ p ].actualServoP -= 1;           /*  move Lft  */
+        }
+
+        if ( turnout_queue[ p ].actualServoP  < turnout_queue[ p ].moveEndState )
+        {
+          turnout_queue[ p ].actualServoP += 1;           /*  move Rgt  */
+        }
+
+        servos.setPWM( p, 0, turnout_queue[ p ].actualServoP );  /*  move the servo  */
+
+        if ( turnout_queue[ p ].actualServoP == turnout_queue[ p ].moveEndState )
+        {
+          turnout_queue[ p ].actualServoP = SERVOOFF;  /*  stop moving  */
+          turnout_queue[ p ].currentState = false;  /*  clear the flag  */
+
+          servos.setPWM( p, 0, SERVOOFF );          /*  stop the servo  */
+        }
+
+      }
+    }
+  }
+};
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
 /*  inspired by  https://forum.arduino.cc/t/debouncing-buttons-read-with-a-pcf-8575/1038096/14  */
 
 
-volatile uint8_t  inputaPrevious;                              // previous reading of buttons
-volatile uint8_t  inputaPrvState;                              // previous state
-volatile uint8_t  inputaActState;                              // buttons actual State
-volatile uint8_t  inputaAcToggle;                              // buttons actual Toggle
-volatile uint8_t  inputaActualOn;                              // down front
-volatile uint8_t  inputaActualOf;                              //   up front
+volatile uint8_t  inputaPreviousInput;                          // previous reading of buttons
+volatile uint8_t  inputaPreviousState;                          // Button previous state 
+volatile uint8_t  inputaActualInState;                          // Button state (pressed, no pressed)
 
-void readButtonsInputa()
+volatile uint8_t  inputaActualToggled;                          // actual Toggle
+volatile uint8_t  inputaActualPressed;                          // actual Pressed
+volatile uint8_t  inputaActualRelease;                          // Actual Released
+
+volatile uint8_t  inputaStablePressed;                          // Stable Pressed
+volatile uint8_t  inputaStableRelease;                          // Stable Released
+
+volatile uint8_t  inputaButtonPinMask = 0b11111111;  /*  tells us which pins are marked as inputs (1)  */
+
+void readButtonsInputa()  /*  inputa = SWITCH1 = 0x24 = inputs  1 t/m  8  */
 {
-
   interrupts(); // Arduino UNO seems to require that we turn on interrupts for I2C to work!
 
+  uint8_t inputaHoldsNewInput = ~inputa.digitalReadByte() & inputaButtonPinMask;
 
-  // uint8_t inputaNewInput = ~PINC & B00000111;                  // 0 when pressed, internal pullup on pins A0, A1, A2
+  /*  this section reacts immediately to a new, different reading (changes)  */
 
+  inputaActualPressed  =  inputaHoldsNewInput & ~inputaPreviousInput;
+  inputaActualRelease  = ~inputaHoldsNewInput &  inputaPreviousInput;
+  inputaActualToggled  =  inputaActualToggled ^  inputaActualPressed;
 
-  uint8_t inputaNewInput = ~inputa.digitalReadByte() & 0b11111111;    // 0 when pressed, so invert
+  /*  this sketch will use the upper part (the rest is for a later session)  */
 
-_PP ( "inputaNewInput = " ); _2L ( inputaNewInput, BIN );
+  if ( ( inputaActualPressed ) || ( inputaActualRelease ) )
+  {
+    setTheSwitchesInputa( );
+  }
 
-// this section reacts immediatley to a new different reading
+  /*  next section develops the idea of a stable press (same for 2 readings) */
 
-  inputaActualOn  =  inputaNewInput & ~inputaPrevious;         // calculate PRESSED  transitioning bits
-  inputaActualOf  = ~inputaNewInput &  inputaPrevious;
+  // inputaStablePressed  = ~( inputaHoldsNewInput ^ inputaPreviousInput );
+  // inputaActualInState &= ~inputaStablePressed;
+  // inputaActualInState |=  inputaHoldsNewInput & inputaStablePressed;
 
-  inputaAcToggle ^=  inputaActualOn;                           // apply TOGGLE 
+  /*  next section might even get a stabler reading of fuzzy button presses  */
 
-_PP ( "inputaActualOn = " ); _2L ( inputaActualOn, BIN );
-_PP ( "inputaActualOf = " ); _2L ( inputaActualOf, BIN );
-_PP ( "inputaAcToggle = " ); _2L ( inputaAcToggle, BIN );
+  // inputaStablePressed  =  inputaActualInState & ~inputaPreviousState;
+  // inputaStableRelease  = ~inputaActualInState &  inputaPreviousState;
 
-  // if (actOn & DELAY_TIMER_BTN) {Serial.print(counter); Serial.println(F(" DELAY pressed ")); }
-  // if (actOn & PROG_SEL_BTN)    {Serial.print(counter); Serial.println(F(" PROG pressed ")); }
-  // if (actOn & START_BTN)       {Serial.print(counter); Serial.println(F(" START pressed ")); }
-  
-  // if (actOff & DELAY_TIMER_BTN){Serial.print(counter); Serial.println(F(" released DELAY")); }
-  // if (actOff & PROG_SEL_BTN)   {Serial.print(counter); Serial.println(F(" released PROG")); }
-  // if (actOff & START_BTN)      {Serial.print(counter); Serial.println(F(" released START")); }
-
-  // digitalWrite(A5, actTog & START_BTN);                // display red led toggle START/STOP 
-
-  // this section below develops the idea of a stable press (same for 2 readings)
-
-  uint8_t staBits = ~( inputaNewInput ^ inputaPrevious );
-
-_PP ( "staBits = " ); _2L ( staBits, BIN );
-
-  // actSta &= ~staBits;                                  // knock out the old stable bit readings
-  // actSta |= newData & staBits;                         // and jam the stable readings in there
-
-  // digitalWrite(A4, actSta & (PROG_SEL_BTN | DELAY_TIMER_BTN));  // one or both, green led ON 
-
-// and could be used with for a fussier actOn / actOff / actTog
-// by basing them on stable state readings
-
-  // unsigned char fussyActOn  = actSta & ~prevSta;
-  // unsigned char fussyActOff = ~actSta & prevSta;
-
-  // if (fussyActOn & DELAY_TIMER_BTN)      {Serial.print(counter); Serial.println(F(" verified fussy DELAY"));}
-  // if (fussyActOff & DELAY_TIMER_BTN)      {Serial.print(counter); Serial.println(F(" released fussy DELAY"));}
-
-
-// always...
-  inputaPrevious = inputaNewInput;                             // bump along the history
-  inputaPrvState = inputaActState;                             // bump along the history
-
-_PP ( "inputaPrevious = " ); _2L ( inputaPrevious, BIN );
-_PP ( "inputaPrvState = " ); _2L ( inputaPrvState, BIN );
-_PL ( "" );
+  /*  always insert the next lines to keep the history in sync with reading  */
+  inputaPreviousInput = inputaHoldsNewInput;
+  inputaPreviousState = inputaActualInState;
 };
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
-void readButtonsInputb()
+volatile uint8_t  inputbPreviousInput;                          // previous reading of buttons
+volatile uint8_t  inputbPreviousState;                          // Button previous state 
+volatile uint8_t  inputbActualInState;                          // Button state (pressed, no pressed)
+
+volatile uint8_t  inputbActualToggled;                          // actual Toggle
+volatile uint8_t  inputbActualPressed;                          // actual Pressed
+volatile uint8_t  inputbActualRelease;                          // Actual Released
+
+volatile uint8_t  inputbStablePressed;                          // Stable Pressed
+volatile uint8_t  inputbStableRelease;                          // Stable Released
+
+volatile uint8_t  inputbButtonPinMask = 0b11111111;  /*  tells us which pins are marked as inputs (1)  */
+
+void readButtonsInputb()  /*  inputb = SWITCH2 = 0x26 = inputs  9 t/m 16  */
 {
-  while ( 1 );
+  interrupts(); // Arduino UNO seems to require that we turn on interrupts for I2C to work!
+
+  uint8_t inputbHoldsNewInput = ~inputb.digitalReadByte() & inputbButtonPinMask;
+
+  /*  this section reacts immediately to a new, different reading  (changes) */
+
+  inputbActualPressed  =  inputbHoldsNewInput & ~inputbPreviousInput;
+  inputbActualRelease  = ~inputbHoldsNewInput &  inputbPreviousInput;
+  inputbActualToggled  =  inputbActualToggled ^  inputbActualPressed;
+
+  /*  this sketch will use the upper part (the rest is for a later session)  */
+
+  if ( ( inputbActualPressed ) || ( inputbActualRelease ) )
+  {
+    setTheSwitchesInputb( );
+  }
+
+  /*  next section develops the idea of a stable press (same for 2 readings) */
+
+  // inputbStablePressed  = ~( inputbHoldsNewInput ^ inputbPreviousInput );
+  // inputbActualInState &= ~inputbStablePressed;
+  // inputbActualInState |=  inputbHoldsNewInput & inputbStablePressed;
+
+  /*  next section might even get a stabler reading of fuzzy button presses  */
+
+  // inputbStablePressed  =  inputbActualInState & ~inputbPreviousState;
+  // inputbStableRelease  = ~inputbActualInState &  inputbPreviousState;
+
+  /*  always insert the next lines to keep the history in sync with reading  */
+  inputbPreviousInput = inputbHoldsNewInput;
+  inputbPreviousState = inputbActualInState;
 };
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
+void setTheSwitchesInputa( )  /*  here the switches  1 till  8 are handled  */
+{
+  for ( uint8_t p = 0; p <  8; ++p )
+  {
+
+    if ( bitRead ( inputaActualPressed, p ) )  /*  key pressed   */
+    {
+      turnout_queue[ p + 0 ].moveEndState = turnout_queue[ p + 0 ].angleRgt;
+      turnout_queue[ p + 0 ].currentState = true;
+      turnout_queue[ p + 0 ].actualServoP = turnout_queue[ p + 0 ].angleLft;
+    }
+
+    if ( bitRead ( inputaActualRelease, p ) )  /*  key released  */
+    {
+      turnout_queue[ p + 0 ].moveEndState = turnout_queue[ p + 0 ].angleLft;
+      turnout_queue[ p + 0 ].currentState = true;
+      turnout_queue[ p + 0 ].actualServoP = turnout_queue[ p + 0 ].angleRgt;
+    }
+
+  }
+
+  if ( scan ( baseAddressJuicer1 ) == 0 )  /*  test JUICER  existance  */
+  {
+    uint8_t juicerInputaRead = juicer.readGPIOA ( );
+
+    for ( uint8_t p = 0; p <  8; ++p )
+    {
+
+      if ( bitRead ( inputaActualPressed, p ) )  /*  key pressed   */
+      {
+        bitSet ( juicerInputaRead, p );
+      }
+
+      if ( bitRead ( inputaActualRelease, p ) )  /*  key released  */
+      {
+        bitClear ( juicerInputaRead, p );
+      }
+
+    }
+    juicer.writeGPIOA ( juicerInputaRead );
+  }
+
+  if ( scan ( baseAddressSignal1 ) == 0 )  /*  test SIGNAL  existance  */
+  {
+    uint8_t signalInputaRead = signal.readGPIOA ( );
+
+    for ( uint8_t p = 0; p <  8; ++p )
+    {
+
+      if ( bitRead ( inputaActualPressed, p ) )  /*  key pressed   */
+      {
+        bitSet ( signalInputaRead, p );
+      }
+
+      if ( bitRead ( inputaActualRelease, p ) )  /*  key released  */
+      {
+        bitClear ( signalInputaRead, p );
+      }
+
+      if ( bitRead ( inputaActualToggled, p ) )  /*  key toggled   */
+      {
+        bitClear ( inputaActualToggled, p );  /*  clear toggled bit  */
+      }
+
+    }
+    signal.writeGPIOA ( signalInputaRead );
+  }
+};
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
+
+void setTheSwitchesInputb( )  /*  here the switches  9 till 16 are handled  */
+{
+  for ( uint8_t p = 0; p <  8; ++p )
+  {
+
+    if ( bitRead ( inputbActualPressed, p ) )  /*  key pressed   */
+    {
+      turnout_queue[ p + 8 ].moveEndState = turnout_queue[ p + 8 ].angleRgt;
+      turnout_queue[ p + 8 ].currentState = true;
+      turnout_queue[ p + 8 ].actualServoP = turnout_queue[ p + 8 ].angleLft;
+    }
+
+    if ( bitRead ( inputbActualRelease, p ) )  /*  key released  */
+    {
+      turnout_queue[ p + 8 ].moveEndState = turnout_queue[ p + 8 ].angleLft;
+      turnout_queue[ p + 8 ].currentState = true;
+      turnout_queue[ p + 8 ].actualServoP = turnout_queue[ p + 8 ].angleRgt;
+    }
+
+  }
+
+  if ( scan ( baseAddressJuicer1 ) == 0 )  /*  test JUICER existance  */
+  {
+    uint8_t juicerInputbRead = juicer.readGPIOB ( );
+
+    for ( uint8_t p = 0; p <  8; ++p )
+    {
+
+      if ( bitRead ( inputbActualPressed, p ) )  /*  key pressed   */
+      {
+        bitSet ( juicerInputbRead, p + 8 );
+      }
+
+      if ( bitRead ( inputbActualRelease, p ) )  /*  key released  */
+      {
+        bitClear ( juicerInputbRead, p + 8 );
+      }
+
+    }
+    juicer.writeGPIOB ( juicerInputbRead );
+  }
+
+  if ( scan ( baseAddressSignal1 ) == 0 )  /*  test SIGNAL  existance  */
+  {
+    uint8_t signalInputbRead = signal.readGPIOB ( );
+
+    for ( uint8_t p = 0; p <  8; ++p )
+    {
+
+      if ( bitRead ( inputbActualPressed, p ) )  /*  key pressed   */
+      {
+        bitSet ( signalInputbRead, p + 8 );
+      }
+
+      if ( bitRead ( inputbActualRelease, p ) )  /*  key released  */
+      {
+        bitClear ( signalInputbRead, p + 8 );
+      }
+
+      if ( bitRead ( inputbActualToggled, p ) )  /*  key toggled   */
+      {
+        bitClear ( inputbActualToggled, p );  /*  clear toggled bit  */
+      }
+
+    }
+    signal.writeGPIOB ( signalInputbRead );
+  }
+};
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
@@ -477,16 +732,14 @@ int setServoAngle( int ang ) {
   pulselength /= 4096;  // 12 bits of resolution   20.000 / 4096 = 4,883
   _PP ( pulselength ); _PP ( " us per bit - " ); 
   _PP ( "default center: "); _PL ( ninety_degrees );
-
-
   return pulse;
 };
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
 
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
-
-/* //////////////////////////////////////////////////////////////////////////////////////////////////////
-   function is doing an automatic reset of the processor after the preScaler time has elapsed          */
+/* next function is doing an automatic reset of the processor after the preScaler time has elapsed     */
 
 void softwareReset( uint8_t preScaler )
 {
@@ -494,14 +747,15 @@ void softwareReset( uint8_t preScaler )
 
   while( 1 ) {}  // Wait for the prescaler time to expire and do an auto-reset
 };
-
-
-/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
-
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
 
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
+
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
 
@@ -598,9 +852,8 @@ void displayText( bool first, bool next, bool clear, byte shift )
   }
 
 };
-
-
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
@@ -939,9 +1192,7 @@ void parseCom( String commandString )
   commandString.remove( 0 );
 
 };
-
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 /************************************************************************************
                         Call-back functions from DCC
@@ -976,10 +1227,10 @@ void    notifyDccSigOutputState (uint16_t Addr, uint8_t State)
 }
 
 
-// void    notifyDccMsg (DCC_MSG * Msg)
-// {
-//             _PL("notifyDccMsg");
-// }
+void    notifyDccMsg (DCC_MSG * Msg)
+{
+            _PL("notifyDccMsg");
+}
 
 
 /* deprecated, only for backward compatibility with version 1.4.2.
@@ -1050,17 +1301,17 @@ void    notifyCVChange( uint16_t CV, uint8_t Value )
     Returns:
       None
 */
-// void    notifyDccFunc( uint16_t Addr, DCC_ADDR_TYPE AddrType, FN_GROUP FuncGrp, uint8_t FuncState )
-// {
-//   _PL( "notifyDccFunc" );
-//   _PP( "Address = "    );
-//   _2L( Addr,        DEC);
-//   _PP( "AddrType = "   );
-//   _2L( AddrType,    DEC);
-//   _PP( "FuncGrp = "    );
-//   _2L( FuncGrp,     DEC);
-//   _PP( "FuncState = "  );
-//   _2L( FuncState,   DEC);
+void    notifyDccFunc( uint16_t Addr, DCC_ADDR_TYPE AddrType, FN_GROUP FuncGrp, uint8_t FuncState )
+{
+  _PL( "notifyDccFunc" );
+  _PP( "Address = "    );
+  _2L( Addr,        DEC);
+  _PP( "AddrType = "   );
+  _2L( AddrType,    DEC);
+  _PP( "FuncGrp = "    );
+  _2L( FuncGrp,     DEC);
+  _PP( "FuncState = "  );
+  _2L( FuncState,   DEC);
 
 //   switch ( FuncGrp )
 //   {
@@ -1097,7 +1348,7 @@ void    notifyCVChange( uint16_t CV, uint8_t Value )
 //         break ;
 //       }
 //   }
-// }                     //  End notifyDccFunc()
+};                    //  End notifyDccFunc()
 
 
 /* **********************************************************************************
@@ -1118,21 +1369,21 @@ void    notifyCVChange( uint16_t CV, uint8_t Value )
  *  Returns:
  *    None
  */
-// void    notifyDccSpeed( uint16_t Addr, DCC_ADDR_TYPE AddrType, uint8_t Speed, DCC_DIRECTION Direction, DCC_SPEED_STEPS SpeedSteps )
-// {
-//   _PL("notifyDccSpeed  and  DCC_DIRECTION");
+void    notifyDccSpeed( uint16_t Addr, DCC_ADDR_TYPE AddrType, uint8_t Speed, DCC_DIRECTION Direction, DCC_SPEED_STEPS SpeedSteps )
+{
+  _PL("notifyDccSpeed  and  DCC_DIRECTION");
   
-//   _PP( "Address = "    );
-//   _2L( Addr,        DEC);
-//   _PP( "AddrType = "   );
-//   _2L( AddrType,    DEC);
-//   _PP( "Speed = "      );
-//   _2L( Speed,       DEC);
-//   _PP( "Direction = "  );
-//   _2L( Direction,   DEC);
-//   _PP( "SpeedSteps = " );
-//   _2L( SpeedSteps, DEC );
-// }
+  _PP( "Address = "    );
+  _2L( Addr,        DEC);
+  _PP( "AddrType = "   );
+  _2L( AddrType,    DEC);
+  _PP( "Speed = "      );
+  _2L( Speed,       DEC);
+  _PP( "Direction = "  );
+  _2L( Direction,   DEC);
+  _PP( "SpeedSteps = " );
+  _2L( SpeedSteps, DEC );
+};
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1212,7 +1463,15 @@ byte scan( byte address )
   byte error = Wire.endTransmission( );
   delay ( 100 );  /*  wait a little wile - debounce  */
   return error;
-}
+};
+
+
+void printBin(byte aByte) {
+  for ( int8_t aBit = 7; aBit >= 0; --aBit )
+    Serial.write(bitRead(aByte, aBit) ? '1' : '0');
+};
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
