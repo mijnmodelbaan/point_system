@@ -352,6 +352,18 @@ turnout_queue[ 4].angleRgt  = 475;
 turnout_queue[ 5].angleLft  = 175;
 turnout_queue[ 5].angleRgt  = 475;
 
+turnout_queue[ 6].angleLft  = 175;
+turnout_queue[ 6].angleRgt  = 475;
+
+turnout_queue[ 7].angleLft  = 175;
+turnout_queue[ 7].angleRgt  = 475;
+
+turnout_queue[ 8].angleLft  = 175;
+turnout_queue[ 8].angleRgt  = 475;
+
+turnout_queue[ 9].angleLft  = 175;
+turnout_queue[ 9].angleRgt  = 475;
+
 turnout_queue[10].angleLft  = 175;
 turnout_queue[10].angleRgt  = 475;
 
