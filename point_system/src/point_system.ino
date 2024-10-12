@@ -343,6 +343,24 @@ turnout_queue[ 1].angleRgt  = 375;
 turnout_queue[ 2].angleLft  = 175;
 turnout_queue[ 2].angleRgt  = 475;
 
+turnout_queue[ 3].angleLft  = 175;
+turnout_queue[ 3].angleRgt  = 475;
+
+turnout_queue[ 4].angleLft  = 175;
+turnout_queue[ 4].angleRgt  = 475;
+
+turnout_queue[ 5].angleLft  = 175;
+turnout_queue[ 5].angleRgt  = 475;
+
+turnout_queue[10].angleLft  = 175;
+turnout_queue[10].angleRgt  = 475;
+
+turnout_queue[11].angleLft  = 175;
+turnout_queue[11].angleRgt  = 475;
+
+turnout_queue[12].angleLft  = 175;
+turnout_queue[12].angleRgt  = 475;
+
 turnout_queue[13].angleLft  = 175;
 turnout_queue[13].angleRgt  = 475;
 
