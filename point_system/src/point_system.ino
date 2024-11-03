@@ -25,7 +25,7 @@
 #define _DEBUG_
 //
 // ******** UNCOMMENT THE FOLLOWING LINE TO -not- CHECK AND INITIALISE THE TWO WIRE INTERFACE
-// #define NO_TWI_CHECK
+#define NO_TWI_CHECK
 //
 
 
@@ -115,6 +115,8 @@ Adafruit_PCF8574  inputb;
    here we declare our own 'header' file ( optional variables )   */
 
 void displayText( bool first, bool next, bool clear = true, byte shift = 3 );
+
+bool scanTWIBus( byte addr = 0x10, uint8_t post_delay = 1 );
 
 
 # pragma GCC diagnostic pop
@@ -383,6 +385,9 @@ turnout_queue[15].angleLft  = 175;
 turnout_queue[15].angleRgt  = 475;
 
 
+/*  check the TWIbus for existance of devices just to be sure  */
+checkTheTWIBusses( );
+
 /*  set all SERVOS, JUICERs and SINALs to the SWITCHes states  */
 readButtonsInputa( );
 readButtonsInputb( );
@@ -407,12 +412,13 @@ void loop() {
   currentMillis = millis();  /*  lets keep track of the time  */
 
 
-  runEvery( 25 ) { readButtonsInputa( ); }
+  runEvery(   25 ) { readButtonsInputa( ); }
 
-  runEvery( 25 ) { readButtonsInputb( ); }
+  runEvery(   25 ) { readButtonsInputb( ); }
 
-  runEvery(  5 ) { setsServosCorrect( ); }
+  runEvery(    5 ) { setsServosCorrect( ); }
 
+  runEvery( 5000 ) { checkTheTWIBusses( ); }
 
   if ( Serial.available() > 0 )  /*  Serial Input needs message-handling  */
   {
@@ -430,9 +436,24 @@ void loop() {
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
 
+volatile bool TWIBusCheck = false;  /*  check the TWI bus for existance of devices  */
+
+void checkTheTWIBusses()
+{
+  TWIBusCheck = scanTWIBus( baseAddressServos1 ) & 
+                scanTWIBus( baseAddressJuicer1 ) & 
+                scanTWIBus( baseAddressSignal1 ) & 
+                scanTWIBus( baseAddressSwitch1 ) & 
+                scanTWIBus( baseAddressSwitch2 ) ;
+
+  if (! TWIBusCheck ) { _PL( "Error: TWIBusCheck [I2C] - check connection(s)" ); }
+};
+/* /////////////////////////////////////////////////////////////////////////////////////////////////// */
+
+
 void setsServosCorrect()
 {
-  if ( scan ( baseAddressServos1 ) == 0 )  /*  test SERVOS  existance  */
+  if ( TWIBusCheck )  /*  check the TWI bus for existance of devices  */
   {
     for ( uint8_t p = 0; p < 16; ++p )
     {
@@ -595,29 +616,9 @@ void setTheSwitchesInputa( )  /*  here the switches  1 till  8 are handled  */
 
   }
 
-  if ( scan ( baseAddressJuicer1 ) == 0 )  /*  test JUICER  existance  */
+  if ( TWIBusCheck )  /*  check the TWI bus for existance of devices  */
   {
     uint8_t juicerInputaRead = juicer.readGPIOA ( );
-
-    for ( uint8_t p = 0; p <  8; ++p )
-    {
-
-      if ( bitRead ( inputaActualPressed, p ) )  /*  key pressed   */
-      {
-        bitSet ( juicerInputaRead, p );
-      }
-
-      if ( bitRead ( inputaActualRelease, p ) )  /*  key released  */
-      {
-        bitClear ( juicerInputaRead, p );
-      }
-
-    }
-    juicer.writeGPIOA ( juicerInputaRead );
-  }
-
-  if ( scan ( baseAddressSignal1 ) == 0 )  /*  test SIGNAL  existance  */
-  {
     uint8_t signalInputaRead = signal.readGPIOA ( );
 
     for ( uint8_t p = 0; p <  8; ++p )
@@ -625,11 +626,13 @@ void setTheSwitchesInputa( )  /*  here the switches  1 till  8 are handled  */
 
       if ( bitRead ( inputaActualPressed, p ) )  /*  key pressed   */
       {
+        bitSet ( juicerInputaRead, p );
         bitSet ( signalInputaRead, p );
       }
 
       if ( bitRead ( inputaActualRelease, p ) )  /*  key released  */
       {
+        bitClear ( juicerInputaRead, p );
         bitClear ( signalInputaRead, p );
       }
 
@@ -637,8 +640,9 @@ void setTheSwitchesInputa( )  /*  here the switches  1 till  8 are handled  */
       {
         bitClear ( inputaActualToggled, p );  /*  clear toggled bit  */
       }
-
     }
+
+    juicer.writeGPIOA ( juicerInputaRead );
     signal.writeGPIOA ( signalInputaRead );
   }
 };
@@ -666,29 +670,9 @@ void setTheSwitchesInputb( )  /*  here the switches  9 till 16 are handled  */
 
   }
 
-  if ( scan ( baseAddressJuicer1 ) == 0 )  /*  test JUICER existance  */
+  if ( TWIBusCheck )  /*  check the TWI bus for existance of devices  */
   {
     uint8_t juicerInputbRead = juicer.readGPIOB ( );
-
-    for ( uint8_t p = 0; p <  8; ++p )
-    {
-
-      if ( bitRead ( inputbActualPressed, p ) )  /*  key pressed   */
-      {
-        bitSet ( juicerInputbRead, p + 8 );
-      }
-
-      if ( bitRead ( inputbActualRelease, p ) )  /*  key released  */
-      {
-        bitClear ( juicerInputbRead, p + 8 );
-      }
-
-    }
-    juicer.writeGPIOB ( juicerInputbRead );
-  }
-
-  if ( scan ( baseAddressSignal1 ) == 0 )  /*  test SIGNAL  existance  */
-  {
     uint8_t signalInputbRead = signal.readGPIOB ( );
 
     for ( uint8_t p = 0; p <  8; ++p )
@@ -696,11 +680,13 @@ void setTheSwitchesInputb( )  /*  here the switches  9 till 16 are handled  */
 
       if ( bitRead ( inputbActualPressed, p ) )  /*  key pressed   */
       {
+        bitSet ( juicerInputbRead, p + 8 );
         bitSet ( signalInputbRead, p + 8 );
       }
 
       if ( bitRead ( inputbActualRelease, p ) )  /*  key released  */
       {
+        bitClear ( juicerInputbRead, p + 8 );
         bitClear ( signalInputbRead, p + 8 );
       }
 
@@ -710,6 +696,7 @@ void setTheSwitchesInputb( )  /*  here the switches  9 till 16 are handled  */
       }
 
     }
+    juicer.writeGPIOB ( juicerInputbRead );
     signal.writeGPIOB ( signalInputbRead );
   }
 };
@@ -727,11 +714,11 @@ int setServoAngle( int ang ) {
   _PP( "...Angle: " ); _PP( ang ); 
   _PP( " / Pulse: " ); _PP( pulse );
 
-  double pulselength = 1000000 / SERVOFRQ;  /*  1,000,000 us per second / 50 = 20.000  */
-  _PP ( pulselength ); _PP ( " us per period = " ); 
-  pulselength /= 4096;  // 12 bits of resolution   20.000 / 4096 = 4,883
-  _PP ( pulselength ); _PP ( " us per bit - " ); 
-  _PP ( "default center: "); _PL ( ninety_degrees );
+  // double pulselength = 1000000 / SERVOFRQ;  /*  1,000,000 us per second / 50 = 20.000  */
+  // _PP ( pulselength ); _PP ( " us per period = " ); 
+  // pulselength /= 4096;  // 12 bits of resolution   20.000 / 4096 = 4,883
+  // _PP ( pulselength ); _PP ( " us per bit - " ); 
+  // _PP ( "default center: "); _PL ( ninety_degrees );
   return pulse;
 };
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
@@ -1450,25 +1437,26 @@ void    notifyDccSpeed( uint16_t Addr, DCC_ADDR_TYPE AddrType, uint8_t Speed, DC
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
 
-/*  scanning the TWI (I2C) interface for existing addresses  */
-/*  maybe a replacement of 
-  if (! servos.begin( ) )
+/*  example from:  https://github.com/adafruit/Adafruit_TestBed/tree/master  */
+/*!
+    @brief  Perform a I2C scan for a given address on the bus
+    @param    addr The address to look for
+    @param    post_delay How many ms to wait after a scan
+    @return True if the address was found
 */
-
-/*  example from   https://github.com/luisllamasbinaburo/Arduino-I2CScanner/tree/master  */
-
-byte scan( byte address )
+/**************************************************************************/
+bool scanTWIBus( byte addr, uint8_t post_delay )
 {
-  Wire.beginTransmission( address );
-  byte error = Wire.endTransmission( );
-  delay ( 100 );  /*  wait a little wile - debounce  */
-  return error;
-};
+  Wire.beginTransmission( addr );
+  bool found = ( Wire.endTransmission( ) == 0 );
+  delay( post_delay );
+  return found;
+}
 
 
 void printBin(byte aByte) {
   for ( int8_t aBit = 7; aBit >= 0; --aBit )
-    Serial.write(bitRead(aByte, aBit) ? '1' : '0');
+    Serial.write(bitRead( aByte, aBit ) ? '1' : '0' );
 };
 
 /* /////////////////////////////////////////////////////////////////////////////////////////////////// */
